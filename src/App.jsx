@@ -3,6 +3,7 @@ import { MainMenu } from './components/MainMenu.jsx';
 import { CharacterSelect } from './components/CharacterSelect.jsx';
 import { DeckBuilder } from './components/DeckBuilder.jsx';
 import { MatchScreen } from './components/MatchScreen.jsx';
+import { OnlineFlow } from './components/OnlineFlow.jsx';
 import { randomCharacter } from './data/characters.js';
 import { randomComposition } from './engine/deck.js';
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext.jsx';
@@ -14,6 +15,7 @@ const SCREENS = {
   CHARACTER: 'character',
   DECK: 'deck',
   MATCH: 'match',
+  ONLINE: 'online',
 };
 
 function TopControls() {
@@ -81,7 +83,9 @@ function GameShell() {
         {t.appTitle}
       </h1>
 
-      {screen === SCREENS.MENU && <MainMenu onStart={() => setScreen(SCREENS.CHARACTER)} />}
+      {screen === SCREENS.MENU && (
+        <MainMenu onStart={() => setScreen(SCREENS.CHARACTER)} onPlayOnline={() => setScreen(SCREENS.ONLINE)} />
+      )}
 
       {screen === SCREENS.CHARACTER && (
         <CharacterSelect
@@ -96,13 +100,14 @@ function GameShell() {
         <DeckBuilder
           character={playerCharacter}
           onBack={() => setScreen(SCREENS.CHARACTER)}
-          onConfirm={(composition) => {
+          onConfirm={(composition, difficulty) => {
             const npcCharacter = randomCharacter(playerCharacter.id);
             setMatchSetup({
               key: `match-${Date.now()}`,
               playerComposition: composition,
               npcCharacter,
               npcComposition: randomComposition(),
+              difficulty,
             });
             setScreen(SCREENS.MATCH);
           }}
@@ -116,9 +121,12 @@ function GameShell() {
           playerComposition={matchSetup.playerComposition}
           npcCharacter={matchSetup.npcCharacter}
           npcComposition={matchSetup.npcComposition}
+          difficulty={matchSetup.difficulty}
           onExit={resetToMenu}
         />
       )}
+
+      {screen === SCREENS.ONLINE && <OnlineFlow onExit={resetToMenu} />}
     </div>
   );
 }

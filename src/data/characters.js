@@ -43,6 +43,12 @@ export const CHARACTERS = [
     color: '#9955dd',
     skillId: SKILL_IDS.CARD_LOCK,
   },
+  {
+    id: 'thach-linh',
+    name: { vi: 'Thạch Linh', en: 'Golem' },
+    color: '#889aaa',
+    skillId: SKILL_IDS.REDRAW_ALL,
+  },
 ];
 
 export function randomCharacter(excludeId) {

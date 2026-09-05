@@ -93,6 +93,19 @@ function resolveSkillPhase(state) {
           players[otherSide(side)] = { ...target, lockedCardId: target.hand[idx].id };
           events.push({ type: SKILL_IDS.CARD_LOCK, by: side });
         }
+      } else if (skillId === SKILL_IDS.REDRAW_ALL) {
+        // Reshuffle the whole hand back into the deck and draw a fresh hand of
+        // the same size — total card count (hand + deck) never changes, so this
+        // can't desync the 7-turn schedule the way an unbalanced draw would.
+        const handSize = p.hand.length;
+        const pool = shuffle([...p.hand, ...p.deckRemaining]);
+        players[side] = {
+          ...p,
+          hand: pool.slice(0, handSize),
+          deckRemaining: pool.slice(handSize),
+          lockedCardId: null,
+        };
+        events.push({ type: SKILL_IDS.REDRAW_ALL, by: side });
       }
     } else {
       p.pendingDeferredSkill = skillId;

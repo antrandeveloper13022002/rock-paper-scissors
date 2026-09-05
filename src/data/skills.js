@@ -57,6 +57,14 @@ export const SKILLS = {
       en: "Locks 1 random card in the opponent's hand — they cannot pick it this round.",
     },
   },
+  [SKILL_IDS.REDRAW_ALL]: {
+    id: SKILL_IDS.REDRAW_ALL,
+    name: { vi: 'Tái Sinh', en: 'Reshape' },
+    description: {
+      vi: 'Trả lại toàn bộ bài trên tay và rút một bộ bài mới cùng số lượng từ deck của bạn.',
+      en: 'Discard your entire hand and draw a fresh hand of the same size from your own deck.',
+    },
+  },
 };
 
 export function isInstantSkill(skillId) {

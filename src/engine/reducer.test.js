@@ -128,6 +128,7 @@ describe('FORCE_REDRAW skill', () => {
     let state = start({ playerSkill: SKILL_IDS.FORCE_REDRAW });
 
     for (let turn = 1; turn <= TOTAL_TURNS; turn += 1) {
+      if (state.result) break; // match already decided early (e.g. reached WIN_SCORE)
       // Fire the skill on turn 1 while npc's deck is still full, the scenario
       // that previously desynced the schedule.
       state = playTurn(state, { playerUse: turn === 1 });
@@ -136,9 +137,6 @@ describe('FORCE_REDRAW skill', () => {
       );
       if (state.phase === PHASES.RESOLVED && !state.result) state = advance(state);
     }
-
-    expect(state.players.player.hand).toHaveLength(0);
-    expect(state.players.npc.hand).toHaveLength(0);
   });
 });
 
@@ -233,6 +231,53 @@ describe('CARD_LOCK skill', () => {
     state = matchReducer(state, { type: 'DECLARE_SKILL', side: 'npc', use: false });
 
     expect(state.players.npc.lockedCardId).toBeNull();
+  });
+});
+
+describe('REDRAW_ALL skill', () => {
+  it('replaces the whole hand while keeping hand size and total card count unchanged', () => {
+    let state = start({ playerSkill: SKILL_IDS.REDRAW_ALL });
+    const before = state.players.player;
+    const beforeTotal = before.hand.length + before.deckRemaining.length;
+    const beforeIds = new Set([...before.hand, ...before.deckRemaining].map((c) => c.id));
+
+    state = matchReducer(state, { type: 'DECLARE_SKILL', side: 'player', use: true });
+    state = matchReducer(state, { type: 'DECLARE_SKILL', side: 'npc', use: false });
+
+    const after = state.players.player;
+    expect(after.hand).toHaveLength(before.hand.length);
+    expect(after.hand.length + after.deckRemaining.length).toBe(beforeTotal);
+    // Every card is accounted for — none duplicated or lost in the reshuffle.
+    const afterIds = [...after.hand, ...after.deckRemaining].map((c) => c.id);
+    expect(new Set(afterIds)).toEqual(beforeIds);
+    expect(afterIds).toHaveLength(beforeTotal);
+    expect(state.skillEvents).toContainEqual({ type: SKILL_IDS.REDRAW_ALL, by: 'player' });
+  });
+
+  it('clears any stale lockedCardId from before the redraw', () => {
+    let state = start({ playerSkill: SKILL_IDS.REDRAW_ALL });
+    state = {
+      ...state,
+      players: {
+        ...state.players,
+        player: { ...state.players.player, lockedCardId: state.players.player.hand[0].id },
+      },
+    };
+    state = matchReducer(state, { type: 'DECLARE_SKILL', side: 'player', use: true });
+    state = matchReducer(state, { type: 'DECLARE_SKILL', side: 'npc', use: false });
+    expect(state.players.player.lockedCardId).toBeNull();
+  });
+
+  it('never desyncs hand/deck sizes between both sides across a full 7-turn match', () => {
+    let state = start({ playerSkill: SKILL_IDS.REDRAW_ALL });
+    for (let turn = 1; turn <= TOTAL_TURNS; turn += 1) {
+      if (state.result) break; // match already decided early (e.g. reached WIN_SCORE)
+      state = playTurn(state, { playerUse: turn === 1 });
+      expect(state.players.player.hand.length + state.players.player.deckRemaining.length).toBe(
+        state.players.npc.hand.length + state.players.npc.deckRemaining.length
+      );
+      if (state.phase === PHASES.RESOLVED && !state.result) state = advance(state);
+    }
   });
 });
 

@@ -1,14 +1,15 @@
 import { useState } from 'react';
-import { CARD_TYPES, DECK_SIZE } from '../engine/constants.js';
+import { CARD_TYPES, DECK_SIZE, NPC_DIFFICULTIES, DEFAULT_NPC_DIFFICULTY } from '../engine/constants.js';
 import { CARD_SPRITES } from '../data/cardSprites.js';
 import { Sprite } from './Sprite.jsx';
 import { useT } from '../i18n/strings.js';
 import { sfx } from '../audio/sfx.js';
 import { Button } from './Button.jsx';
 
-export function DeckBuilder({ character, onConfirm, onBack }) {
+export function DeckBuilder({ character, onConfirm, onBack, showDifficulty = true }) {
   const { t, lang } = useT();
   const [composition, setComposition] = useState({ keo: 3, bua: 2, bao: 2 });
+  const [difficulty, setDifficulty] = useState(DEFAULT_NPC_DIFFICULTY);
 
   const total = CARD_TYPES.reduce((sum, ty) => sum + composition[ty], 0);
   const isValid = total === DECK_SIZE;
@@ -59,6 +60,28 @@ export function DeckBuilder({ character, onConfirm, onBack }) {
         {t.total}: {total} / {DECK_SIZE}
       </div>
 
+      {showDifficulty && (
+        <div className="mt-4 pt-3 border-t border-border-dim">
+          <div className="text-center text-xs tracking-wide uppercase text-text-dim mb-2">{t.difficulty}</div>
+          <div className="flex justify-center gap-2">
+            {NPC_DIFFICULTIES.map((level) => (
+              <button
+                key={level}
+                className={`px-3 py-1.5 text-xs uppercase tracking-wide border-2 font-mono font-bold ${
+                  difficulty === level ? 'border-accent-blue text-accent-blue' : 'border-border-dim text-text-dim3'
+                }`}
+                onClick={() => {
+                  sfx.click();
+                  setDifficulty(level);
+                }}
+              >
+                {t.difficultyLabels[level]}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-center gap-3.5 mt-3.5 flex-wrap">
         <Button
           variant="ghost"
@@ -74,7 +97,7 @@ export function DeckBuilder({ character, onConfirm, onBack }) {
           disabled={!isValid}
           onClick={() => {
             sfx.click();
-            onConfirm(composition);
+            onConfirm(composition, difficulty);
           }}
         >
           {t.startMatch}

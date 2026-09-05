@@ -7,6 +7,9 @@ function durationFor(phase) {
   return 0;
 }
 
+// dispatch is optional: pass it in local/NPC mode to auto-timeout the turn.
+// Omit it for server-authoritative online mode, where this becomes a display-only
+// countdown and the server's own timer is what actually advances the match.
 export function useTurnTimer(phase, turnNumber, dispatch) {
   const [secondsLeft, setSecondsLeft] = useState(durationFor(phase));
 
@@ -18,7 +21,7 @@ export function useTurnTimer(phase, turnNumber, dispatch) {
       setSecondsLeft((prev) => {
         if (prev <= 1) {
           clearInterval(intervalId);
-          dispatch({ type: phase === PHASES.SKILL ? 'TIMEOUT_SKILL' : 'TIMEOUT_CHOOSE' });
+          dispatch?.({ type: phase === PHASES.SKILL ? 'TIMEOUT_SKILL' : 'TIMEOUT_CHOOSE' });
           return 0;
         }
         return prev - 1;

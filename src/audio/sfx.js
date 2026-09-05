@@ -3,6 +3,7 @@
 
 let ctx = null;
 let muted = false;
+const activeNodes = new Set();
 
 try {
   muted = localStorage.getItem('rps-card-game-muted') === '1';
@@ -32,6 +33,22 @@ export function setMuted(value) {
   } catch {
     // ignore
   }
+  // Silence anything already scheduled (Web Audio timings are locked in the
+  // moment .start() is called, so notes queued a beat ahead — e.g. by the music
+  // lookahead scheduler — would otherwise keep playing out even after muting).
+  if (value && ctx) {
+    const now = ctx.currentTime;
+    activeNodes.forEach(({ osc, gain }) => {
+      try {
+        gain.gain.cancelScheduledValues(now);
+        gain.gain.setValueAtTime(0, now);
+        osc.stop(now);
+      } catch {
+        // already stopped/ended — ignore
+      }
+    });
+    activeNodes.clear();
+  }
 }
 
 // Plays a single tone with a short attack/release envelope so it doesn't click.
@@ -57,6 +74,10 @@ function tone({ freq, duration = 0.12, type = 'square', volume = 0.18, startAt =
   gain.connect(audio.destination);
   osc.start(t0);
   osc.stop(t0 + duration + 0.02);
+
+  const node = { osc, gain };
+  activeNodes.add(node);
+  osc.onended = () => activeNodes.delete(node);
 }
 
 function sequence(notes) {
