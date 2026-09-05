@@ -1,0 +1,129 @@
+// Lightweight 8-bit style sound effects synthesized with the Web Audio API.
+// No external audio files needed — fits the retro pixel-art theme and keeps bundle size tiny.
+
+let ctx = null;
+let muted = false;
+
+try {
+  muted = localStorage.getItem('rps-card-game-muted') === '1';
+} catch {
+  // ignore
+}
+
+function getContext() {
+  if (typeof window === 'undefined') return null;
+  if (!ctx) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return null;
+    ctx = new AudioContextClass();
+  }
+  if (ctx.state === 'suspended') ctx.resume();
+  return ctx;
+}
+
+export function isMuted() {
+  return muted;
+}
+
+export function setMuted(value) {
+  muted = value;
+  try {
+    localStorage.setItem('rps-card-game-muted', value ? '1' : '0');
+  } catch {
+    // ignore
+  }
+}
+
+// Plays a single tone with a short attack/release envelope so it doesn't click.
+// `at` (absolute AudioContext time) is used by the music scheduler; one-shot sfx
+// calls omit it and fall back to "now" via `startAt` (seconds from now).
+function tone({ freq, duration = 0.12, type = 'square', volume = 0.18, startAt = 0, glideTo = null, at = null }) {
+  const audio = getContext();
+  if (!audio || muted) return;
+
+  const osc = audio.createOscillator();
+  const gain = audio.createGain();
+  osc.type = type;
+
+  const t0 = at !== null ? at : audio.currentTime + startAt;
+  osc.frequency.setValueAtTime(freq, t0);
+  if (glideTo) osc.frequency.exponentialRampToValueAtTime(Math.max(glideTo, 1), t0 + duration);
+
+  gain.gain.setValueAtTime(0, t0);
+  gain.gain.linearRampToValueAtTime(volume, t0 + 0.008);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+
+  osc.connect(gain);
+  gain.connect(audio.destination);
+  osc.start(t0);
+  osc.stop(t0 + duration + 0.02);
+}
+
+function sequence(notes) {
+  let t = 0;
+  notes.forEach(([freq, duration, type]) => {
+    tone({ freq, duration, type: type || 'square', startAt: t });
+    t += duration * 0.9;
+  });
+}
+
+// ── Background music: a tiny looping 4-bar chiptune (A minor: Am-F-C-G) ──────
+const STEP_SECONDS = 0.28;
+const BASS_NOTES = [110.0, 87.31, 130.81, 98.0]; // A2 F2 C3 G2, one per bar
+const LEAD_STEPS = [
+  220.0, 261.63, 329.63, 261.63, // Am: A C E
+  174.61, 220.0, 261.63, 220.0, // F: F A C
+  261.63, 329.63, 392.0, 329.63, // C: C E G
+  196.0, 246.94, 293.66, 246.94, // G: G B D
+];
+
+let musicOn = false;
+let musicStep = 0;
+let nextStepTime = 0;
+let musicTimer = null;
+
+function scheduleMusicStep() {
+  const audio = getContext();
+  if (!audio || !musicOn) return;
+
+  while (nextStepTime < audio.currentTime + 0.2) {
+    if (musicStep % 4 === 0) {
+      tone({ freq: BASS_NOTES[(musicStep / 4) % BASS_NOTES.length], duration: STEP_SECONDS * 3.6, type: 'triangle', volume: 0.05, at: nextStepTime });
+    }
+    tone({ freq: LEAD_STEPS[musicStep % LEAD_STEPS.length], duration: STEP_SECONDS * 0.8, type: 'square', volume: 0.035, at: nextStepTime });
+    nextStepTime += STEP_SECONDS;
+    musicStep += 1;
+  }
+  musicTimer = setTimeout(scheduleMusicStep, 100);
+}
+
+export function startMusic() {
+  const audio = getContext();
+  if (!audio || musicOn) return;
+  musicOn = true;
+  musicStep = 0;
+  nextStepTime = audio.currentTime + 0.1;
+  scheduleMusicStep();
+}
+
+export function stopMusic() {
+  musicOn = false;
+  if (musicTimer) clearTimeout(musicTimer);
+}
+
+export function isMusicOn() {
+  return musicOn;
+}
+
+export const sfx = {
+  click: () => tone({ freq: 320, duration: 0.05, type: 'square', volume: 0.12 }),
+  select: () => tone({ freq: 520, duration: 0.06, type: 'square', volume: 0.14 }),
+  draw: () => tone({ freq: 300, duration: 0.14, type: 'triangle', volume: 0.14, glideTo: 620 }),
+  skill: () => tone({ freq: 200, duration: 0.22, type: 'sawtooth', volume: 0.16, glideTo: 900 }),
+  ready: () => tone({ freq: 440, duration: 0.09, type: 'square', volume: 0.14, glideTo: 660 }),
+  winRound: () => sequence([[520, 0.09], [700, 0.14]]),
+  loseRound: () => sequence([[300, 0.1], [180, 0.18]]),
+  drawRound: () => tone({ freq: 260, duration: 0.16, type: 'triangle', volume: 0.13 }),
+  matchWin: () => sequence([[523, 0.1], [659, 0.1], [784, 0.1], [1046, 0.24]]),
+  matchLose: () => sequence([[392, 0.14], [330, 0.14], [262, 0.28]]),
+};

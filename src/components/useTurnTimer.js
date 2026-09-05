@@ -1,0 +1,33 @@
+import { useEffect, useState } from 'react';
+import { PHASES, SKILL_PHASE_SECONDS, CHOOSE_PHASE_SECONDS } from '../engine/constants.js';
+
+function durationFor(phase) {
+  if (phase === PHASES.SKILL) return SKILL_PHASE_SECONDS;
+  if (phase === PHASES.CHOOSE) return CHOOSE_PHASE_SECONDS;
+  return 0;
+}
+
+export function useTurnTimer(phase, turnNumber, dispatch) {
+  const [secondsLeft, setSecondsLeft] = useState(durationFor(phase));
+
+  useEffect(() => {
+    if (phase !== PHASES.SKILL && phase !== PHASES.CHOOSE) return undefined;
+
+    setSecondsLeft(durationFor(phase));
+    const intervalId = setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(intervalId);
+          dispatch({ type: phase === PHASES.SKILL ? 'TIMEOUT_SKILL' : 'TIMEOUT_CHOOSE' });
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(intervalId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, turnNumber]);
+
+  return secondsLeft;
+}
