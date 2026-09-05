@@ -89,6 +89,7 @@ function GameShell() {
 
       {screen === SCREENS.CHARACTER && (
         <CharacterSelect
+          onBack={() => setScreen(SCREENS.MENU)}
           onConfirm={(character) => {
             setPlayerCharacter(character);
             setScreen(SCREENS.DECK);

@@ -7,7 +7,7 @@ import { useT } from '../i18n/strings.js';
 import { sfx } from '../audio/sfx.js';
 import { Button } from './Button.jsx';
 
-export function CharacterSelect({ onConfirm }) {
+export function CharacterSelect({ onConfirm, onBack }) {
   const { t, lang } = useT();
   const [selectedId, setSelectedId] = useState(CHARACTERS[0].id);
   const selected = CHARACTERS.find((c) => c.id === selectedId);
@@ -54,6 +54,15 @@ export function CharacterSelect({ onConfirm }) {
       </div>
 
       <div className="flex justify-center gap-3.5 mt-3.5 flex-wrap">
+        <Button
+          variant="ghost"
+          onClick={() => {
+            sfx.click();
+            onBack();
+          }}
+        >
+          {t.back}
+        </Button>
         <Button
           variant="primary"
           onClick={() => {

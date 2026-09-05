@@ -94,6 +94,7 @@ export function OnlineFlow({ onExit }) {
   if (step === STEPS.CHARACTER) {
     return (
       <CharacterSelect
+        onBack={onExit}
         onConfirm={(character) => {
           setPlayerCharacter(character);
           setStep(STEPS.DECK);
