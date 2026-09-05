@@ -41,6 +41,22 @@ export const SKILLS = {
       en: "Peek at 2 random cards currently in the opponent's hand.",
     },
   },
+  [SKILL_IDS.POINT_STEAL]: {
+    id: SKILL_IDS.POINT_STEAL,
+    name: { vi: 'Cướp Điểm', en: 'Point Steal' },
+    description: {
+      vi: 'Nếu thắng turn này, ngoài điểm nhận được còn trừ 1 điểm của đối thủ (không dưới 0).',
+      en: "If you win this round, on top of your points, take 1 point away from the opponent (never below 0).",
+    },
+  },
+  [SKILL_IDS.CARD_LOCK]: {
+    id: SKILL_IDS.CARD_LOCK,
+    name: { vi: 'Khóa Bài', en: 'Card Lock' },
+    description: {
+      vi: 'Khóa 1 lá ngẫu nhiên trên tay đối thủ, họ không thể chọn lá đó ở turn này.',
+      en: "Locks 1 random card in the opponent's hand — they cannot pick it this round.",
+    },
+  },
 };
 
 export function isInstantSkill(skillId) {

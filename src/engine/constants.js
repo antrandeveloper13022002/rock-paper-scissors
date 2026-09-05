@@ -29,9 +29,11 @@ export const SKILL_IDS = {
   DENY: 'deny',
   FORCE_REDRAW: 'forceRedraw',
   PEEK: 'peek',
+  POINT_STEAL: 'pointSteal',
+  CARD_LOCK: 'cardLock',
 };
 
 // instant skills resolve immediately once both players declare in skill-phase
-// deferred skills are registered and resolved later (swap before reveal, double/deny at scoring)
-export const INSTANT_SKILLS = new Set([SKILL_IDS.FORCE_REDRAW, SKILL_IDS.PEEK]);
-export const DEFERRED_SKILLS = new Set([SKILL_IDS.SWAP, SKILL_IDS.DOUBLE, SKILL_IDS.DENY]);
+// deferred skills are registered and resolved later (swap before reveal, double/deny/pointSteal at scoring)
+export const INSTANT_SKILLS = new Set([SKILL_IDS.FORCE_REDRAW, SKILL_IDS.PEEK, SKILL_IDS.CARD_LOCK]);
+export const DEFERRED_SKILLS = new Set([SKILL_IDS.SWAP, SKILL_IDS.DOUBLE, SKILL_IDS.DENY, SKILL_IDS.POINT_STEAL]);

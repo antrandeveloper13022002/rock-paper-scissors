@@ -31,6 +31,18 @@ export const CHARACTERS = [
     color: '#38c898',
     skillId: SKILL_IDS.PEEK,
   },
+  {
+    id: 'chien-binh',
+    name: { vi: 'Chiến Binh', en: 'Warrior' },
+    color: '#cc2222',
+    skillId: SKILL_IDS.POINT_STEAL,
+  },
+  {
+    id: 'phap-su',
+    name: { vi: 'Pháp Sư', en: 'Mage' },
+    color: '#9955dd',
+    skillId: SKILL_IDS.CARD_LOCK,
+  },
 ];
 
 export function randomCharacter(excludeId) {

@@ -35,7 +35,7 @@ export function CharacterSelect({ onConfirm }) {
               }}
             >
               <div className="flex justify-center mb-1.5">
-                <Sprite grid={sprite.grid} pal={sprite.pal} size={56} />
+                <Sprite grid={sprite.grid} pal={sprite.pal} rects={sprite.rects} size={56} />
               </div>
               <div
                 className="text-[10px] tracking-wide uppercase"

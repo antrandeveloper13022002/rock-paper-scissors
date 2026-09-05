@@ -29,6 +29,10 @@ function skillEventText(event, playerCharacter, npcCharacter, t, lang) {
   if (event.type === 'peek') {
     return t.skillPeek(actorName, skill.name[lang]);
   }
+  if (event.type === 'cardLock') {
+    const targetName = event.by === 'player' ? npcCharacter.name[lang] : playerCharacter.name[lang];
+    return t.skillCardLock(actorName, targetName, skill.name[lang]);
+  }
   return t.skillDeferred(actorName, skill.name[lang]);
 }
 
@@ -164,7 +168,7 @@ export function MatchScreen({ playerCharacter, playerComposition, npcCharacter, 
               animation: flashSides.has('npc') ? 'skillPulse 1.1s ease-out' : undefined,
             }}
           >
-            <Sprite grid={npcSprite.grid} pal={npcSprite.pal} size={60} flip />
+            <Sprite grid={npcSprite.grid} pal={npcSprite.pal} rects={npcSprite.rects} size={60} flip />
           </div>
           <span className="text-[8px] sm:text-[9px] tracking-[1px] sm:tracking-[3px]" style={{ color: npcCharacter.color }}>
             {npcCharacter.name[lang]}
@@ -190,7 +194,7 @@ export function MatchScreen({ playerCharacter, playerComposition, npcCharacter, 
               animation: flashSides.has('player') ? 'skillPulse 1.1s ease-out' : undefined,
             }}
           >
-            <Sprite grid={playerSprite.grid} pal={playerSprite.pal} size={60} />
+            <Sprite grid={playerSprite.grid} pal={playerSprite.pal} rects={playerSprite.rects} size={60} />
           </div>
           <span className="text-[8px] sm:text-[9px] tracking-[1px] sm:tracking-[3px]" style={{ color: playerCharacter.color }}>
             {playerCharacter.name[lang]}
@@ -254,7 +258,8 @@ export function MatchScreen({ playerCharacter, playerComposition, npcCharacter, 
                 key={c.id}
                 type={c.type}
                 selected={player.selectedCardId === c.id}
-                disabled={state.phase !== PHASES.CHOOSE || player.ready}
+                disabled={state.phase !== PHASES.CHOOSE || player.ready || c.id === player.lockedCardId}
+                locked={c.id === player.lockedCardId}
                 justDrawn={justDrawnIds.has(c.id)}
                 onClick={() => {
                   sfx.select();

@@ -34,6 +34,7 @@ export const STRINGS = {
     skillForceRedraw: (actor, target, skillName) =>
       `${actor} dùng ${skillName}: ${target} bị buộc đổi 1 lá trên tay!`,
     skillPeek: (actor, skillName) => `${actor} dùng ${skillName}: đã xem trộm 2 lá của đối thủ.`,
+    skillCardLock: (actor, target, skillName) => `${actor} dùng ${skillName}: khóa 1 lá trên tay ${target}!`,
     skillDeferred: (actor, skillName) =>
       `${actor} đã kích hoạt ${skillName} — hiệu ứng sẽ áp dụng ở cuối turn.`,
 
@@ -83,6 +84,7 @@ export const STRINGS = {
     skillForceRedraw: (actor, target, skillName) =>
       `${actor} used ${skillName}: ${target} was forced to swap a card!`,
     skillPeek: (actor, skillName) => `${actor} used ${skillName}: peeked at 2 of the opponent's cards.`,
+    skillCardLock: (actor, target, skillName) => `${actor} used ${skillName}: locked one of ${target}'s cards!`,
     skillDeferred: (actor, skillName) =>
       `${actor} activated ${skillName} — the effect will apply at the end of the round.`,
 

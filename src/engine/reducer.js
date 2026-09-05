@@ -24,6 +24,7 @@ function createPlayerState(character, composition) {
     selectedCardId: null,
     ready: false,
     peekInfo: null,
+    lockedCardId: null,
   };
 }
 
@@ -83,6 +84,15 @@ function resolveSkillPhase(state) {
         const shuffled = shuffle(target.hand);
         p.peekInfo = shuffled.slice(0, 2);
         events.push({ type: SKILL_IDS.PEEK, by: side });
+      } else if (skillId === SKILL_IDS.CARD_LOCK) {
+        const target = players[otherSide(side)];
+        // Only lock a card when the target still has another one to fall back
+        // on — locking their only card would leave them with no legal choice.
+        if (target.hand.length > 1) {
+          const idx = Math.floor(Math.random() * target.hand.length);
+          players[otherSide(side)] = { ...target, lockedCardId: target.hand[idx].id };
+          events.push({ type: SKILL_IDS.CARD_LOCK, by: side });
+        }
       }
     } else {
       p.pendingDeferredSkill = skillId;
@@ -124,12 +134,16 @@ function resolveChoosePhase(state) {
   let pointsAwarded = 0;
   if (winnerSide) {
     const winner = players[winnerSide];
-    const loser = players[otherSide(winnerSide)];
+    const loserSide = otherSide(winnerSide);
+    const loser = players[loserSide];
     pointsAwarded = winner.pendingDeferredSkill === SKILL_IDS.DOUBLE ? 2 : 1;
     if (loser.pendingDeferredSkill === SKILL_IDS.DENY) {
       pointsAwarded = 0;
     }
     players[winnerSide] = { ...winner, score: winner.score + pointsAwarded };
+    if (winner.pendingDeferredSkill === SKILL_IDS.POINT_STEAL) {
+      players[loserSide] = { ...loser, score: Math.max(0, loser.score - 1) };
+    }
   }
 
   // remove the originally selected physical cards from each hand
@@ -191,6 +205,7 @@ function startNextTurn(state) {
       selectedCardId: null,
       ready: false,
       peekInfo: null,
+      lockedCardId: null,
     };
   }
 
@@ -237,6 +252,7 @@ export function matchReducer(state, action) {
       const player = state.players[side];
       if (player.ready) return state;
       if (!player.hand.some((c) => c.id === cardId)) return state;
+      if (cardId === player.lockedCardId) return state;
       return {
         ...state,
         players: { ...state.players, [side]: { ...player, selectedCardId: cardId } },
@@ -261,7 +277,9 @@ export function matchReducer(state, action) {
         if (p.ready) continue;
         let selectedCardId = p.selectedCardId;
         if (!selectedCardId && p.hand.length > 0) {
-          selectedCardId = p.hand[Math.floor(Math.random() * p.hand.length)].id;
+          const choosable = p.hand.filter((c) => c.id !== p.lockedCardId);
+          const pool = choosable.length > 0 ? choosable : p.hand;
+          selectedCardId = pool[Math.floor(Math.random() * pool.length)].id;
         }
         players[side] = { ...p, selectedCardId, ready: true };
       }
