@@ -88,7 +88,13 @@ export function MatchScreenView({
     return () => clearTimeout(timeout);
   }, [me.hand]);
 
-  // Flash the portrait of whoever used a skill this turn
+  // Flash the portrait of whoever used a skill this turn.
+  // Keyed on (turnNumber, phase) — primitives that stay equal across repeated
+  // renders of "the same moment" — rather than state.skillEvents itself: in
+  // online play every server broadcast is a freshly JSON-parsed object, so a
+  // reference-based dependency would re-trigger this on every later broadcast
+  // in the same turn (e.g. the opponent selecting a card) and replay the sound
+  // and flash repeatedly instead of once.
   const [flashSides, setFlashSides] = useState(new Set());
   useEffect(() => {
     if (!state.skillEvents || state.skillEvents.length === 0) return undefined;
@@ -96,25 +102,26 @@ export function MatchScreenView({
     sfx.skill();
     const timeout = setTimeout(() => setFlashSides(new Set()), 1100);
     return () => clearTimeout(timeout);
-  }, [state.skillEvents]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.turnNumber, state.phase]);
 
-  // Round-result sting
+  // Round-result sting — same reasoning: key on primitives, not state.lastRound.
   useEffect(() => {
     if (!state.lastRound) return;
     if (state.lastRound.winnerSide === null) sfx.drawRound();
     else if (state.lastRound.winnerSide === mySide) sfx.winRound();
     else sfx.loseRound();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.lastRound]);
+  }, [state.turnNumber, state.phase]);
 
-  // Match-end fanfare
+  // Match-end fanfare — same reasoning: key on primitives, not state.result.
   useEffect(() => {
     if (!state.result) return;
     if (state.result.winner === mySide) sfx.matchWin();
     else if (state.result.winner === oppSide) sfx.matchLose();
     else sfx.drawRound();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.result]);
+  }, [state.turnNumber, state.phase]);
 
   const oppDeckLabel = useMemo(() => deckSummary(oppComposition, t.cardLabels), [oppComposition, t]);
   const oppCardsLeft = opp.hand.length + opp.deckRemaining.length;

@@ -69,6 +69,29 @@ describe('SWAP skill', () => {
   });
 });
 
+describe('skillEvents lifecycle', () => {
+  it('is cleared once the round resolves, so it cannot re-arm the UI skill-flash effect a second time', () => {
+    // Regression test: the online client keys its skill-flash effect on
+    // (turnNumber, phase) rather than the skillEvents array reference (which is
+    // never stable across JSON-parsed server broadcasts). That only works if
+    // skillEvents is actually empty by the time the round resolves — otherwise
+    // the RESOLVED phase transition re-triggers the same flash/sound a second
+    // time for the same skill use.
+    let state = start({ playerSkill: SKILL_IDS.PEEK });
+    state = matchReducer(state, { type: 'DECLARE_SKILL', side: 'player', use: true });
+    state = matchReducer(state, { type: 'DECLARE_SKILL', side: 'npc', use: false });
+    expect(state.skillEvents.length).toBeGreaterThan(0);
+
+    state = matchReducer(state, { type: 'SELECT_CARD', side: 'player', cardId: state.players.player.hand[0].id });
+    state = matchReducer(state, { type: 'READY', side: 'player' });
+    state = matchReducer(state, { type: 'SELECT_CARD', side: 'npc', cardId: state.players.npc.hand[0].id });
+    state = matchReducer(state, { type: 'READY', side: 'npc' });
+
+    expect(state.phase).toBe(PHASES.RESOLVED);
+    expect(state.skillEvents).toEqual([]);
+  });
+});
+
 describe('DOUBLE skill', () => {
   it('doubles the points earned when the user wins', () => {
     let state = start({ playerSkill: SKILL_IDS.DOUBLE, playerComposition: ALL_KEO, npcComposition: ALL_BAO });

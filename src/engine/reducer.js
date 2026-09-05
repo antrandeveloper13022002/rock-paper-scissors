@@ -184,6 +184,10 @@ function resolveChoosePhase(state) {
     lastRound: roundRecord,
     log: [...state.log, roundRecord],
     result,
+    // Skill events were only ever meant for the choose-phase status line (the
+    // reveal message takes over from here) — clearing them also means the UI's
+    // skill-flash effect won't spuriously re-arm on this phase transition.
+    skillEvents: [],
   };
 }
 
