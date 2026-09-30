@@ -32,6 +32,8 @@ export function MatchScreen({ playerCharacter, playerComposition, npcCharacter, 
       myCharacter={playerCharacter}
       oppCharacter={npcCharacter}
       oppComposition={npcComposition}
+      myComposition={playerComposition}
+      stageId={npcCharacter.id}
       secondsLeft={secondsLeft}
       onExit={onExit}
     />

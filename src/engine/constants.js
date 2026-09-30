@@ -1,5 +1,7 @@
 export const CARD_TYPES = ['keo', 'bua', 'bao'];
 
+export const otherSide = (side) => (side === 'player' ? 'npc' : 'player');
+
 // key beats value
 export const BEATS = {
   keo: 'bao',

@@ -30,3 +30,18 @@ figma-design-board-deck/
 *.sw?
 
 .vercel
+
+# Env files (keep the example)
+.env*
+!.env.example
+
+# Claude Code setup and project governance docs: local only, never pushed
+.claude/
+CLAUDE.md
+.mcp.json
+docs/
+tasks/
+
+# Playwright output
+test-results/
+playwright-report/

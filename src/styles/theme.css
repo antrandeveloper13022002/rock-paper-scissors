@@ -1,20 +1,22 @@
 @import 'tailwindcss';
 
+/* Pixel fantasy palette (docs/design/README.md). Token names are kept from the
+   Phase 1 theme so every existing utility class picks up the new look. */
 @theme {
-  --color-bg: #07080f;
-  --color-panel-top: #0e101a;
-  --color-panel-bot: #080a12;
-  --color-border-dim: #1e2234;
-  --color-border-dim2: #232845;
-  --color-text: #aabbdd;
-  --color-text-dim: #454870;
-  --color-text-dim2: #2a3050;
-  --color-text-dim3: #3a4060;
-  --color-accent-blue: #38a8e8;
-  --color-accent-red: #cc2020;
-  --color-accent-green: #4ade80;
-  --color-danger: #dd3311;
-  --font-mono: 'Courier New', Courier, monospace;
+  --color-bg: #120d26;
+  --color-panel-top: #6b4428;
+  --color-panel-bot: #4a2f1b;
+  --color-border-dim: #2a1a10;
+  --color-border-dim2: #8a5a34;
+  --color-text: #f3e2b8;
+  --color-text-dim: #d9c496;
+  --color-text-dim2: #c7ad74;
+  --color-text-dim3: #e8d3a0;
+  --color-accent-blue: #f2c14e;
+  --color-accent-red: #e0404a;
+  --color-accent-green: #6fc4b5;
+  --color-danger: #ff6a5a;
+  --font-mono: 'VT323', 'Courier New', monospace;
 
   --animate-skill-pulse: skillPulse 1.1s ease-out;
   --animate-card-draw-in: cardDrawIn 0.35s ease-out;
@@ -24,7 +26,13 @@
   body {
     @apply bg-bg text-text font-mono m-0;
     image-rendering: pixelated;
+    /* VT323 has a small x-height; scale it up so the existing px sizes stay readable. */
+    font-size-adjust: 0.62;
   }
+}
+
+.pixel-panel {
+  box-shadow: 0 0 0 3px #2a1a10, inset 0 3px 0 #8a5a34, inset 0 -3px 0 #3d2616, 0 8px 0 3px rgba(0, 0, 0, 0.35);
 }
 
 @keyframes skillPulse {
@@ -43,6 +51,75 @@
   100% { transform: translateY(340px) rotate(360deg); opacity: 0; }
 }
 
-.scanlines {
-  background-image: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0, 0, 0, 0.12) 3px, rgba(0, 0, 0, 0.12) 4px);
+/* Round-result and skill effects (BR-3D-06) */
+@keyframes fxShake {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-4px, 2px); }
+  40% { transform: translate(4px, -2px); }
+  60% { transform: translate(-3px, -1px); }
+  80% { transform: translate(3px, 1px); }
+}
+@keyframes fxSmash {
+  0% { transform: translate(-30px, -40px) rotate(-60deg); }
+  45% { transform: translate(6px, 0) rotate(0deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+@keyframes fxShatter {
+  0% { opacity: 1; transform: translate(0, 0) rotate(0deg); }
+  30% { opacity: 1; transform: translate(0, 0) rotate(0deg); }
+  100% { opacity: 0; transform: translate(var(--dx), var(--dy)) rotate(var(--rot)); }
+}
+@keyframes fxSlash {
+  0% { clip-path: inset(0 100% 0 0); opacity: 1; }
+  40% { clip-path: inset(0 0 0 0); opacity: 1; }
+  100% { clip-path: inset(0 0 0 0); opacity: 0; }
+}
+@keyframes fxSplitL {
+  0%, 40% { transform: translate(0, 0) rotate(0deg); }
+  100% { transform: translate(-10px, 8px) rotate(-14deg); opacity: 0.7; }
+}
+@keyframes fxSplitR {
+  0%, 40% { transform: translate(0, 0) rotate(0deg); }
+  100% { transform: translate(10px, 8px) rotate(14deg); opacity: 0.7; }
+}
+@keyframes fxEngulf {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.35); }
+  70% { transform: scale(1.15, 0.9); }
+  100% { transform: scale(1.1); }
+}
+@keyframes fxSwallowed {
+  0% { opacity: 1; transform: translate(0, 0) scale(1); }
+  45% { opacity: 1; transform: translate(calc(var(--sx, -1) * 30px), 0) scale(0.6); }
+  60%, 100% { opacity: 0; transform: translate(calc(var(--sx, -1) * 40px), 0) scale(0.2); }
+}
+@keyframes fxBounceL {
+  0% { transform: translateX(0); }
+  35% { transform: translateX(18px) rotate(6deg); }
+  100% { transform: translateX(-6px) rotate(-10deg); opacity: 0.7; }
+}
+@keyframes fxBounceR {
+  0% { transform: translateX(0); }
+  35% { transform: translateX(-18px) rotate(-6deg); }
+  100% { transform: translateX(6px) rotate(10deg); opacity: 0.7; }
+}
+@keyframes fxPop {
+  0% { transform: scale(0); opacity: 0; }
+  30% { transform: scale(1.3); opacity: 1; }
+  100% { transform: scale(1); opacity: 0; }
+}
+@keyframes fxHeartLost {
+  0% { transform: scale(1); opacity: 1; }
+  40% { transform: scale(1.4); }
+  100% { transform: translateY(-14px) scale(0.4); opacity: 0; }
+}
+@keyframes fxBanner {
+  0% { transform: translateY(-12px) scale(0.8); opacity: 0; }
+  15% { transform: translateY(0) scale(1.05); opacity: 1; }
+  80% { transform: translateY(0) scale(1); opacity: 1; }
+  100% { transform: translateY(-6px); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fx-motion { animation: none !important; }
 }

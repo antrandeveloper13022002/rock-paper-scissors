@@ -5,7 +5,7 @@ export const SKILLS = {
     id: SKILL_IDS.SWAP,
     name: { vi: 'Đảo Số Phận', en: 'Fate Swap' },
     description: {
-      vi: 'Sau khi cả 2 bên chọn bài xong, hoán đổi lá bài của 2 bên ở turn này trước khi lật bài.',
+      vi: 'Sau khi cả 2 bên chọn bài xong, hoán đổi lá bài của 2 bên ở lượt này trước khi lật bài.',
       en: "After both sides pick their card, swap it with the opponent's for this round before reveal.",
     },
   },
@@ -13,7 +13,7 @@ export const SKILLS = {
     id: SKILL_IDS.DOUBLE,
     name: { vi: 'Cuồng Phong', en: 'Berserk Rage' },
     description: {
-      vi: 'Nếu thắng turn này, điểm nhận được nhân đôi.',
+      vi: 'Nếu thắng lượt này, điểm nhận được nhân đôi.',
       en: 'If you win this round, your points earned are doubled.',
     },
   },
@@ -21,7 +21,7 @@ export const SKILLS = {
     id: SKILL_IDS.DENY,
     name: { vi: 'Oán Niệm', en: 'Curse' },
     description: {
-      vi: 'Nếu thua turn này, đối thủ thắng cũng không được cộng điểm.',
+      vi: 'Nếu thua lượt này, đối thủ thắng cũng không được cộng điểm.',
       en: 'If you lose this round, the winner still gets no points.',
     },
   },
@@ -45,7 +45,7 @@ export const SKILLS = {
     id: SKILL_IDS.POINT_STEAL,
     name: { vi: 'Cướp Điểm', en: 'Point Steal' },
     description: {
-      vi: 'Nếu thắng turn này, ngoài điểm nhận được còn trừ 1 điểm của đối thủ (không dưới 0).',
+      vi: 'Nếu thắng lượt này, ngoài điểm nhận được còn trừ 1 điểm của đối thủ (không dưới 0).',
       en: "If you win this round, on top of your points, take 1 point away from the opponent (never below 0).",
     },
   },
@@ -53,7 +53,7 @@ export const SKILLS = {
     id: SKILL_IDS.CARD_LOCK,
     name: { vi: 'Khóa Bài', en: 'Card Lock' },
     description: {
-      vi: 'Khóa 1 lá ngẫu nhiên trên tay đối thủ, họ không thể chọn lá đó ở turn này.',
+      vi: 'Khóa 1 lá ngẫu nhiên trên tay đối thủ, họ không thể chọn lá đó ở lượt này.',
       en: "Locks 1 random card in the opponent's hand — they cannot pick it this round.",
     },
   },
@@ -61,7 +61,7 @@ export const SKILLS = {
     id: SKILL_IDS.REDRAW_ALL,
     name: { vi: 'Tái Sinh', en: 'Reshape' },
     description: {
-      vi: 'Trả lại toàn bộ bài trên tay và rút một bộ bài mới cùng số lượng từ deck của bạn.',
+      vi: 'Trả lại toàn bộ bài trên tay và rút một bộ bài mới cùng số lượng từ bộ bài của bạn.',
       en: 'Discard your entire hand and draw a fresh hand of the same size from your own deck.',
     },
   },

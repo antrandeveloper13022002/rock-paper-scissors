@@ -88,15 +88,51 @@ function sequence(notes) {
   });
 }
 
-// ── Background music: a tiny looping 4-bar chiptune (A minor: Am-F-C-G) ──────
-const STEP_SECONDS = 0.28;
-const BASS_NOTES = [110.0, 87.31, 130.81, 98.0]; // A2 F2 C3 G2, one per bar
-const LEAD_STEPS = [
-  220.0, 261.63, 329.63, 261.63, // Am: A C E
-  174.61, 220.0, 261.63, 220.0, // F: F A C
-  261.63, 329.63, 392.0, 329.63, // C: C E G
-  196.0, 246.94, 293.66, 246.94, // G: G B D
-];
+// ── Background music: one looping 4-bar chiptune per stage (BR-3D-04) ──────
+// Notes are written as names ('A4', '.' = rest); each theme is 4 bass notes
+// (one per bar) and 16 lead steps.
+const NOTE_INDEX = { C: 0, 'C#': 1, D: 2, 'D#': 3, Eb: 3, E: 4, F: 5, 'F#': 6, G: 7, 'G#': 8, Ab: 8, A: 9, 'A#': 10, Bb: 10, B: 11 };
+function noteFreq(name) {
+  if (name === '.') return null;
+  const [, letter, octave] = name.match(/^([A-G][#b]?)(\d)$/);
+  const midi = (Number(octave) + 1) * 12 + NOTE_INDEX[letter];
+  return 440 * 2 ** ((midi - 69) / 12);
+}
+const theme = (step, bass, lead, leadWave = 'square') => ({
+  step,
+  bass: bass.split(' ').map(noteFreq),
+  lead: lead.split(' ').map(noteFreq),
+  leadWave,
+});
+
+export const MUSIC_THEMES = {
+  // Castle / menu: A minor, Am-F-C-G
+  'chien-binh': theme(0.28, 'A2 F2 C3 G2', 'A3 C4 E4 C4 F3 A3 C4 A3 C4 E4 G4 E4 G3 B3 D4 B3'),
+  // Thunder Peak: fast D minor arpeggios
+  'loi-long': theme(0.2, 'D2 D2 Bb1 C2', 'D4 F4 A4 D5 D4 F4 A4 D5 Bb3 D4 F4 Bb4 C4 E4 G4 C5'),
+  // Blood Arena: driving E phrygian on a saw lead
+  'huyet-vu': theme(0.22, 'E2 F2 E2 D2', 'E4 E4 G4 F4 F4 A4 G4 F4 E4 G4 B4 G4 D4 F4 A4 F4', 'sawtooth'),
+  // Misty Graveyard: slow, sparse C minor
+  'am-anh': theme(0.4, 'C2 Ab1 Eb2 G1', 'C5 . Eb5 D5 Ab4 . C5 B4 Eb5 D5 C5 G4 G4 B4 D5 .', 'triangle'),
+  // Sunset Temple: pentatonic
+  'bao-loan': theme(0.26, 'A2 E2 D2 E2', 'A4 C5 D5 E5 G5 E5 D5 C5 D5 E5 G5 A5 G5 E5 D5 E5'),
+  // Star Observatory: dreamy major sevenths
+  'thien-nhan': theme(0.34, 'F2 A2 D2 C2', 'F4 A4 C5 E5 A4 C5 E5 G5 D4 F4 A4 C5 C4 E4 G4 B4', 'triangle'),
+  // Mage Tower: harmonic minor
+  'phap-su': theme(0.3, 'A2 D2 E2 A2', 'A4 C5 E5 G#5 D5 F5 A5 F5 E5 G#5 B4 G#4 A4 E5 C5 A4'),
+  // Crystal Cave: low, echoing
+  'thach-linh': theme(0.36, 'E2 G2 D2 E2', 'E4 . G4 . B4 . A4 G4 D4 . F#4 . A4 G4 F#4 D4', 'triangle'),
+};
+const DEFAULT_THEME = 'chien-binh';
+let currentTheme = MUSIC_THEMES[DEFAULT_THEME];
+
+// Switches the loop; takes effect from the next step, restarting at bar 1.
+export function setMusicTheme(id) {
+  const next = MUSIC_THEMES[id] || MUSIC_THEMES[DEFAULT_THEME];
+  if (next === currentTheme) return;
+  currentTheme = next;
+  musicStep = 0;
+}
 
 let musicOn = false;
 let musicStep = 0;
@@ -108,11 +144,13 @@ function scheduleMusicStep() {
   if (!audio || !musicOn) return;
 
   while (nextStepTime < audio.currentTime + 0.2) {
+    const { step, bass, lead, leadWave } = currentTheme;
     if (musicStep % 4 === 0) {
-      tone({ freq: BASS_NOTES[(musicStep / 4) % BASS_NOTES.length], duration: STEP_SECONDS * 3.6, type: 'triangle', volume: 0.05, at: nextStepTime });
+      tone({ freq: bass[(musicStep / 4) % bass.length], duration: step * 3.6, type: 'triangle', volume: 0.05, at: nextStepTime });
     }
-    tone({ freq: LEAD_STEPS[musicStep % LEAD_STEPS.length], duration: STEP_SECONDS * 0.8, type: 'square', volume: 0.035, at: nextStepTime });
-    nextStepTime += STEP_SECONDS;
+    const leadFreq = lead[musicStep % lead.length];
+    if (leadFreq) tone({ freq: leadFreq, duration: step * 0.8, type: leadWave, volume: 0.035, at: nextStepTime });
+    nextStepTime += step;
     musicStep += 1;
   }
   musicTimer = setTimeout(scheduleMusicStep, 100);

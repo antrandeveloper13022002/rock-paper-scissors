@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTurnTimer } from './useTurnTimer.js';
 import { MatchScreenView } from './MatchScreenView.jsx';
 import { useT } from '../i18n/strings.js';
+import { PHASES } from '../engine/constants.js';
 
-// Online PvP: the server (server/index.js) runs the exact same reducer
+// Online PvP: the server (server/gameServer.js) runs the exact same reducer
 // authoritatively and pushes full state snapshots down; this component never
 // runs the reducer itself, it only ever reflects what the server says and
 // forwards the local player's intent as ACTION messages.
@@ -14,18 +15,26 @@ export function OnlineMatchScreen({
   myCharacter,
   oppCharacter,
   oppComposition,
+  stageNotice,
+  stageId,
+  myComposition,
   onExit,
   onOpponentLeft,
 }) {
   const { t } = useT();
   const [state, setState] = useState(initialState);
   const [opponentLeft, setOpponentLeft] = useState(false);
+  const finishedRef = useRef(false);
+  useEffect(() => {
+    finishedRef.current = state.phase === PHASES.FINISHED;
+  }, [state.phase]);
 
   useEffect(() => {
     const onMessage = (event) => {
       const msg = JSON.parse(event.data);
       if (msg.type === 'STATE') setState(msg.state);
-      else if (msg.type === 'OPPONENT_LEFT') setOpponentLeft(true);
+      // after the match ends, the opponent leaving the result screen is not a disconnect
+      else if (msg.type === 'OPPONENT_LEFT') setOpponentLeft((left) => left || !finishedRef.current);
     };
     ws.addEventListener('message', onMessage);
     return () => ws.removeEventListener('message', onMessage);
@@ -64,6 +73,9 @@ export function OnlineMatchScreen({
       myCharacter={myCharacter}
       oppCharacter={oppCharacter}
       oppComposition={oppComposition}
+      myComposition={myComposition}
+      stageId={stageId}
+      notice={stageNotice}
       secondsLeft={secondsLeft}
       onExit={() => {
         ws.close();

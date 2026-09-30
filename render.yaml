@@ -1,0 +1,15 @@
+# Render blueprint for the online match server (server/index.js).
+# Render → New → Blueprint → pick this repo. Render sets PORT itself.
+services:
+  - type: web
+    name: rps-card-duel-ws
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: node server/index.js
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      # Comma-separated list of allowed page origins (the Vercel domain).
+      - key: ALLOWED_ORIGINS
+        value: https://webgame-iota.vercel.app

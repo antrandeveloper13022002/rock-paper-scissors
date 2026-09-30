@@ -9,14 +9,18 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
-    "server": "node server/index.js"
+    "server": "node server/index.js",
+    "e2e": "playwright test"
   },
   "dependencies": {
+    "@react-three/fiber": "^9.8.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "three": "^0.186.1",
     "ws": "^8.21.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",

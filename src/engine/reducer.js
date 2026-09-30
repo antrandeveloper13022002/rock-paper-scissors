@@ -5,6 +5,7 @@ import {
   INITIAL_HAND_SIZE,
   WIN_SCORE,
   TOTAL_TURNS,
+  otherSide,
 } from './constants.js';
 import { buildDeck, shuffle, drawOne, removeCard } from './deck.js';
 import { resolveRound } from './rules.js';
@@ -42,7 +43,6 @@ export function createMatch({ playerCharacter, playerComposition, npcCharacter, 
   };
 }
 
-const otherSide = (side) => (side === 'player' ? 'npc' : 'player');
 
 function bothDeclared(players) {
   return players.player.skillDeclaredThisTurn !== null && players.npc.skillDeclaredThisTurn !== null;
@@ -167,6 +167,9 @@ function resolveChoosePhase(state) {
     turnNumber: state.turnNumber,
     playerCard,
     npcCard,
+    // true when Fate Swap traded the cards: each side then spent the card
+    // shown on the other side (used by the UI to track spent deck cards)
+    swapped: Boolean(swapUser),
     winnerSide,
     pointsAwarded,
   };

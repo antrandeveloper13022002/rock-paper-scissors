@@ -5,6 +5,8 @@ import { defineConfig } from 'vite'
 
 // https://vite.dev/config/
 export default defineConfig({
+  // Playwright specs (e2e/) run in a real browser via `npm run e2e`, not Vitest.
+  test: { exclude: ['e2e/**', 'node_modules/**'] },
   plugins: [
     react(),
     tailwindcss(),

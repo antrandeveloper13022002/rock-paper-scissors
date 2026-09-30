@@ -66,6 +66,13 @@ describe('SWAP skill', () => {
     expect(state.lastRound.winnerSide).toBe('player');
     expect(state.lastRound.playerCard.type).toBe('bua');
     expect(state.lastRound.npcCard.type).toBe('keo');
+    expect(state.lastRound.swapped).toBe(true);
+  });
+
+  it('marks ordinary rounds as not swapped', () => {
+    let state = start({ playerComposition: ALL_KEO, npcComposition: ALL_BUA });
+    state = playTurn(state, { playerType: 'keo', npcType: 'bua' });
+    expect(state.lastRound.swapped).toBe(false);
   });
 });
 
