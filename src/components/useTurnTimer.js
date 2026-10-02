@@ -11,13 +11,21 @@ function durationFor(phase) {
 // Omit it for server-authoritative online mode, where this becomes a display-only
 // countdown and the server's own timer is what actually advances the match.
 // `paused` freezes the countdown where it is; it resumes from there.
-export function useTurnTimer(phase, turnNumber, dispatch, paused = false) {
+// `sync` ({ turn, phase, seconds }, online only): the server's real time left
+// for that phase — applied when it matches the current phase, e.g. after a
+// rejoin or a resumed pause.
+export function useTurnTimer(phase, turnNumber, dispatch, paused = false, sync = null) {
   const [secondsLeft, setSecondsLeft] = useState(durationFor(phase));
 
   // a new phase / turn restarts the countdown
   useEffect(() => {
     setSecondsLeft(durationFor(phase));
   }, [phase, turnNumber]);
+
+  useEffect(() => {
+    if (sync && sync.turn === turnNumber && sync.phase === phase) setSecondsLeft(sync.seconds);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sync]);
 
   useEffect(() => {
     if (paused || (phase !== PHASES.SKILL && phase !== PHASES.CHOOSE)) return undefined;

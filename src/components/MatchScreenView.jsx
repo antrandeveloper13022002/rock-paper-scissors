@@ -50,6 +50,7 @@ export function MatchScreenView({
   stageId,
   notice,
   onPause,
+  pausesLeft, // online only: manual pauses left (undefined = unlimited)
   secondsLeft,
   onExit,
 }) {
@@ -210,7 +211,9 @@ export function MatchScreenView({
           {onPause && state.phase !== PHASES.FINISHED && (
             <button
               type="button"
-              className="pointer-events-auto mt-0.5 px-3 py-1 border-0 cursor-pointer font-mono text-base text-[#f3e2b8] bg-[#4d4858] shadow-[0_0_0_3px_#2a1a10,inset_0_-3px_0_#353140] hover:brightness-110"
+              className="pointer-events-auto mt-0.5 px-3 py-1 border-0 cursor-pointer font-mono text-base text-[#f3e2b8] bg-[#4d4858] shadow-[0_0_0_3px_#2a1a10,inset_0_-3px_0_#353140] enabled:hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
+              disabled={pausesLeft === 0}
+              title={pausesLeft === undefined ? undefined : t.pausesLeft(pausesLeft)}
               onClick={() => {
                 sfx.click();
                 onPause();
@@ -218,6 +221,7 @@ export function MatchScreenView({
             >
               <span aria-hidden="true">⏸ </span>
               {t.pause}
+              {pausesLeft !== undefined && ` (${pausesLeft})`}
             </button>
           )}
           {state.log.length > 0 && (

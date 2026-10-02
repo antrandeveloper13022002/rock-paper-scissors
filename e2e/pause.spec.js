@@ -1,5 +1,17 @@
 import { test, expect } from '@playwright/test';
 
+// Contexts opened by hand are closed after each test, so their sockets don't
+// pile up against the server's per-address connection limit.
+const openContexts = [];
+test.afterEach(async () => {
+  await Promise.all(openContexts.splice(0).map((c) => c.close()));
+});
+async function newContext(browser) {
+  const ctx = await browser.newContext();
+  openContexts.push(ctx);
+  return ctx;
+}
+
 async function startNpcMatch(page) {
   await page.goto('/');
   await page.getByRole('button', { name: /chơi với máy/i }).click();
@@ -10,8 +22,8 @@ async function startNpcMatch(page) {
 
 // Two players matched through random matchmaking; returns both pages.
 async function startOnlineMatch(browser) {
-  const ctxA = await browser.newContext();
-  const ctxB = await browser.newContext();
+  const ctxA = await newContext(browser);
+  const ctxB = await newContext(browser);
   const a = await ctxA.newPage();
   const b = await ctxB.newPage();
   for (const p of [a, b]) {
@@ -49,8 +61,10 @@ test('vs NPC: pause freezes the match; clicking outside continues; leaving goes 
 
 test('online: a pausing player who leaves gives the opponent the win', async ({ browser }) => {
   const { a, b } = await startOnlineMatch(browser);
+  await expect(a.getByRole('button', { name: 'Tạm dừng (3)' })).toBeVisible();
   await a.getByRole('button', { name: /tạm dừng/i }).click();
   await expect(a.getByRole('dialog')).toContainText(/còn \d+ giây/i);
+  await expect(a.getByRole('dialog')).toContainText('Còn 2/3 lần tạm dừng.');
   await expect(b.getByText(/đối thủ đang tạm dừng/i)).toBeVisible();
 
   await a.getByRole('button', { name: /về trang chính/i }).click();

@@ -16,9 +16,19 @@ export const WIN_SCORE = 5;
 // fully known until the last turn.
 export const TOTAL_TURNS = 7;
 
+// Decks of the previous build (7 cards): still accepted online so cached
+// PWA clients keep working until they update (server/protocol.js).
+export const LEGACY_DECK_SIZE = 7;
+
 export const SKILL_PHASE_SECONDS = 6;
 export const CHOOSE_PHASE_SECONDS = 14;
 export const TURN_SECONDS = SKILL_PHASE_SECONDS + CHOOSE_PHASE_SECONDS;
+
+// Online timing (BR-ONLINE-01/02/03), shared by the server, the client and the
+// UI text so they never disagree.
+export const ONLINE_GRACE_SECONDS = 30; // max pause / time to come back after a drop
+export const ONLINE_WAIT_SECONDS = 180; // matchmaking search / empty private room
+export const ONLINE_MAX_PAUSES = 3; // manual pauses per player per match
 
 export const PHASES = {
   SKILL: 'skill',

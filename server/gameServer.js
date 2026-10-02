@@ -5,7 +5,15 @@
 import { randomUUID } from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import { createMatch, matchReducer } from '../src/engine/reducer.js';
-import { PHASES, SKILL_PHASE_SECONDS, CHOOSE_PHASE_SECONDS, otherSide } from '../src/engine/constants.js';
+import {
+  PHASES,
+  SKILL_PHASE_SECONDS,
+  CHOOSE_PHASE_SECONDS,
+  ONLINE_GRACE_SECONDS,
+  ONLINE_WAIT_SECONDS,
+  ONLINE_MAX_PAUSES,
+  otherSide,
+} from '../src/engine/constants.js';
 import { validateSetup, pickStage, redactFor } from './protocol.js';
 
 const MAX_PAYLOAD_BYTES = 16 * 1024;
@@ -32,9 +40,10 @@ export function createGameServer({
   maxRooms = 500,
   maxMessagesPerSecond = 20,
   maxConnectionsPerIp = 8,
-  waitingRoomTtlMs = 3 * 60 * 1000,
-  pauseLimitMs = 30 * 1000,
+  waitingRoomTtlMs = ONLINE_WAIT_SECONDS * 1000,
+  pauseLimitMs = ONLINE_GRACE_SECONDS * 1000,
   finishedResultTtlMs = 10 * 60 * 1000,
+  heartbeatMs = 15 * 1000,
   rng = Math.random,
   nextTurnDelayMs = 3000,
 } = {}) {
@@ -125,6 +134,10 @@ export function createGameServer({
   // pauseLimitMs; if the side that paused (or dropped) is not back by then,
   // it forfeits. A disconnect is a forced pause that replaces a manual one.
   function pauseRoom(room, side, reason) {
+    if (reason === 'pause') {
+      if (room.paused || room.pausesLeft[side] <= 0) return;
+      room.pausesLeft[side] -= 1;
+    }
     if (room.paused) {
       if (reason !== 'disconnect') return;
       clearTimeout(room.paused.timer);
@@ -139,7 +152,7 @@ export function createGameServer({
       applyAction(room, { type: 'FORFEIT', side, cause: reason === 'pause' ? 'pauseTimeout' : 'disconnect' });
     }, pauseLimitMs);
     room.paused = { by: side, reason, until: Date.now() + pauseLimitMs, timer };
-    broadcast(room, { type: 'PAUSED', by: side, reason, seconds: Math.round(pauseLimitMs / 1000) });
+    broadcast(room, { type: 'PAUSED', by: side, reason, seconds: Math.round(pauseLimitMs / 1000), pausesLeft: room.pausesLeft[side] });
   }
 
   function resumeRoom(room) {
@@ -148,7 +161,23 @@ export function createGameServer({
     room.paused = null;
     if (room.resumeAction) setPhaseTimer(room, room.resumeAction, room.resumeIn);
     room.resumeAction = null;
-    broadcast(room, { type: 'RESUMED' });
+    broadcast(room, { type: 'RESUMED', phaseMsLeft: phaseMsLeft(room) });
+  }
+
+  // A player leaves a live match on purpose: the other side wins (unless the
+  // outcome was already decided — the engine keeps that result).
+  function leaveMatch(room, side) {
+    if (room.paused) clearTimeout(room.paused.timer);
+    room.paused = null;
+    room.resumeAction = null;
+    applyAction(room, { type: 'FORFEIT', side, cause: 'left' });
+  }
+
+  // How long the current skill/choose phase still has, so a client that
+  // (re)joins or resumes shows the server's real countdown.
+  function phaseMsLeft(room) {
+    if (room.paused) return room.resumeAction ? room.resumeIn : null;
+    return room.phaseTimer ? Math.max(0, room.phaseTimer.deadline - Date.now()) : null;
   }
 
   function startMatch(room) {
@@ -162,6 +191,7 @@ export function createGameServer({
     room.stageVotes = { player: player.stageVote, npc: npc.stageVote };
     room.stage = pickStage(player.stageVote, npc.stageVote, rng);
     room.tokens = { player: randomUUID(), npc: randomUUID() };
+    room.pausesLeft = { player: ONLINE_MAX_PAUSES, npc: ONLINE_MAX_PAUSES };
     for (const side of SIDES) {
       rejoinTokens.set(room.tokens[side], { roomCode: room.code, side });
       send(room.sockets[side], { type: 'MATCH_START', ...matchSnapshot(room, side) });
@@ -179,6 +209,8 @@ export function createGameServer({
       playerComposition: room.pending.player.composition,
       npcComposition: room.pending.npc.composition,
       rejoinToken: room.tokens[side],
+      phaseMsLeft: phaseMsLeft(room),
+      pausesLeft: room.pausesLeft[side],
     };
   }
 
@@ -281,9 +313,17 @@ export function createGameServer({
       }
       const entry = rejoinTokens.get(token);
       const room = entry && rooms.get(entry.roomCode);
-      if (!room || room.sockets[entry.side]) {
+      if (!room) {
         send(ws, { type: 'ERROR', message: 'REJOIN_FAILED' });
         return;
+      }
+      // The token is the seat's secret: whoever holds it takes the seat back,
+      // even if the server still thinks the old connection is alive (a phone
+      // switching networks leaves a half-open socket for a while).
+      const old = room.sockets[entry.side];
+      if (old && old !== ws) {
+        socketInfo.delete(old); // so its 'close' doesn't count as a disconnect
+        old.terminate();
       }
       room.sockets[entry.side] = ws;
       socketInfo.set(ws, { roomCode: room.code, side: entry.side });
@@ -294,6 +334,15 @@ export function createGameServer({
 
     const info = socketInfo.get(ws);
     const room = info && rooms.get(info.roomCode);
+
+    // "Cancel" in the lobby. If the pairing already happened (MATCH_START was
+    // on its way), cancelling counts as leaving the match (BR-ONLINE-01).
+    if (msg.type === 'CANCEL_SEARCH') {
+      if (searching?.ws === ws) stopSearching(ws);
+      else if (room?.state && room.state.phase !== PHASES.FINISHED) leaveMatch(room, info.side);
+      return;
+    }
+
     if (!room || !room.state || room.state.phase === PHASES.FINISHED) return;
 
     if (msg.type === 'PAUSE') {
@@ -312,10 +361,7 @@ export function createGameServer({
       // trusted from the payload — otherwise a player could act for the
       // opponent. FORFEIT = leaving the match (the other side wins).
       if (msg.action.type === 'FORFEIT') {
-        if (room.paused) clearTimeout(room.paused.timer);
-        room.paused = null;
-        room.resumeAction = null;
-        applyAction(room, { type: 'FORFEIT', side: info.side, cause: 'left' });
+        leaveMatch(room, info.side);
         return;
       }
       if (room.paused) return; // the match is frozen
@@ -381,6 +427,11 @@ export function createGameServer({
     // listener Node would treat it as uncaught and take the whole server down.
     // ws closes the socket itself afterwards, and 'close' cleans up the room.
     ws.on('error', () => {});
+    // heartbeat: a socket that misses a pong is dead (see the interval below)
+    ws.isAlive = true;
+    ws.on('pong', () => {
+      ws.isAlive = true;
+    });
 
     // Simple per-connection flood guard: too many messages in one second closes it.
     let windowStart = Date.now();
@@ -400,6 +451,22 @@ export function createGameServer({
     });
     ws.on('close', () => handleClose(ws));
   });
+
+  // Half-open connections (network switched, laptop slept) never send 'close'
+  // on their own; ping every heartbeatMs and drop any that didn't answer the
+  // last ping, so the disconnect grace period starts promptly.
+  const heartbeat = setInterval(() => {
+    for (const ws of wss.clients) {
+      if (!ws.isAlive) {
+        ws.terminate();
+        continue;
+      }
+      ws.isAlive = false;
+      ws.ping();
+    }
+  }, heartbeatMs);
+  heartbeat.unref?.();
+  wss.on('close', () => clearInterval(heartbeat));
 
   return { wss, rooms };
 }

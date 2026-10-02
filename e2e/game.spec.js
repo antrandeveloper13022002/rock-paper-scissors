@@ -1,5 +1,17 @@
 import { test, expect } from '@playwright/test';
 
+// Contexts opened by hand (online tests) are closed after each test, so their
+// sockets don't pile up against the server's per-address connection limit.
+const openContexts = [];
+test.afterEach(async () => {
+  await Promise.all(openContexts.splice(0).map((c) => c.close()));
+});
+async function newContext(browser) {
+  const ctx = await browser.newContext();
+  openContexts.push(ctx);
+  return ctx;
+}
+
 // Collects page errors so every test can assert the app ran cleanly.
 function trackErrors(page) {
   const errors = [];
@@ -64,8 +76,8 @@ test('language switch to English', async ({ page }) => {
 });
 
 test('online: two players vote different stages and see the same pick', async ({ browser }) => {
-  const a = await (await browser.newContext()).newPage();
-  const b = await (await browser.newContext()).newPage();
+  const a = await (await newContext(browser)).newPage();
+  const b = await (await newContext(browser)).newPage();
   for (const p of [a, b]) {
     await p.goto('/');
     await p.getByRole('button', { name: /chơi trực tuyến/i }).click();
@@ -88,7 +100,7 @@ test('online: two players vote different stages and see the same pick', async ({
 });
 
 test('online: random matchmaking pairs two searching players', async ({ browser }) => {
-  const pages = [await (await browser.newContext()).newPage(), await (await browser.newContext()).newPage()];
+  const pages = [await (await newContext(browser)).newPage(), await (await newContext(browser)).newPage()];
   for (const p of pages) {
     await p.goto('/');
     await p.getByRole('button', { name: /chơi trực tuyến/i }).click();

@@ -426,6 +426,30 @@ describe('full match simulation never crashes', () => {
 });
 
 describe('FORFEIT', () => {
+  it('cannot take a match the leaver already won (5 points reached, reveal pause)', () => {
+    // player wins every round: all keo vs all bao
+    let state = start({ playerComposition: { keo: DECK_SIZE, bua: 0, bao: 0 }, npcComposition: { keo: 0, bua: 0, bao: DECK_SIZE } });
+    for (let turn = 1; turn <= WIN_SCORE; turn += 1) {
+      state = playTurn(state, { playerType: 'keo', npcType: 'bao' });
+      if (turn < WIN_SCORE) state = advance(state);
+    }
+    expect(state.phase).toBe(PHASES.RESOLVED);
+    expect(state.result).toEqual({ winner: 'player', reason: 'score5' });
+    const after = matchReducer(state, { type: 'FORFEIT', side: 'player', cause: 'disconnect' });
+    expect(after.phase).toBe(PHASES.FINISHED);
+    expect(after.result).toEqual({ winner: 'player', reason: 'score5' });
+  });
+
+  it('after the last turn the scores decide, not the forfeit', () => {
+    let state = start({ playerComposition: { keo: DECK_SIZE, bua: 0, bao: 0 }, npcComposition: { keo: DECK_SIZE - 2, bua: 0, bao: 2 } });
+    for (let turn = 1; turn <= TOTAL_TURNS; turn += 1) {
+      state = playTurn(state, { playerType: 'keo', npcType: 'bao' });
+      if (turn < TOTAL_TURNS) state = advance(state);
+    }
+    const after = matchReducer(state, { type: 'FORFEIT', side: 'player', cause: 'left' });
+    expect(after.result).toEqual({ winner: 'player', reason: 'roundsExhausted' });
+  });
+
   it('ends the match at once with the other side as winner', () => {
     const state = matchReducer(start(), { type: 'FORFEIT', side: 'npc' });
     expect(state.phase).toBe(PHASES.FINISHED);

@@ -2,10 +2,12 @@
 // localStorage so a closed tab can get back in, together with a short summary
 // so the menu can say *which* match it is. `seenAt` is refreshed while the
 // match is open (and when the page is hidden/closed).
+import { ONLINE_GRACE_SECONDS } from '../engine/constants.js';
+
 const KEY = 'rps-card-game-rejoin';
-// The server holds a dropped seat for 30 s; after that the match is over, but
-// it keeps the final result for 10 min.
-export const REJOIN_WINDOW_MS = 30 * 1000;
+// The server holds a dropped seat for ONLINE_GRACE_SECONDS; after that the
+// match is over, but it keeps the final result for 10 min.
+export const REJOIN_WINDOW_MS = ONLINE_GRACE_SECONDS * 1000;
 const RESULT_KEPT_MS = 10 * 60 * 1000;
 
 // summary: { me, opp, stage, turn, myScore, oppScore } (ids/numbers, no text)

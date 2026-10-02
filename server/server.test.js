@@ -20,6 +20,10 @@ describe('validateSetup', () => {
     );
   });
 
+  it('still accepts the 7-card decks of cached older clients', () => {
+    expect(validateSetup({ characterId: 'loi-long', composition: { keo: 3, bua: 2, bao: 2 } })).not.toBeNull();
+  });
+
   it('rejects unknown characters, bad decks and unknown stages', () => {
     expect(validateSetup({ characterId: 'nope', composition: COMP })).toBeNull();
     expect(validateSetup({ characterId: 'loi-long', composition: { keo: 7, bua: 1, bao: 0 } })).toBeNull();
@@ -239,8 +243,26 @@ describe('game server', () => {
     b.json({ type: 'RESUME' }); // only the side that paused can resume
     expect(await b.nextWithin(200)).toBe('none');
     a.json({ type: 'RESUME' });
-    expect(await a.next()).toEqual({ type: 'RESUMED' });
-    expect(await b.next()).toEqual({ type: 'RESUMED' });
+    expect(await a.next()).toMatchObject({ type: 'RESUMED' });
+    expect(await b.next()).toMatchObject({ type: 'RESUMED' });
+  });
+
+  it('each player gets 3 pauses per match', async () => {
+    await start();
+    const { a, b, startA } = await pair();
+    expect(startA.pausesLeft).toBe(3);
+    for (const left of [2, 1, 0]) {
+      a.json({ type: 'PAUSE' });
+      expect(await a.next()).toMatchObject({ type: 'PAUSED', by: 'player', pausesLeft: left });
+      await b.next();
+      a.json({ type: 'RESUME' });
+      await a.next();
+      await b.next();
+    }
+    a.json({ type: 'PAUSE' }); // used up: ignored
+    expect(await b.nextWithin(200)).toBe('none');
+    b.json({ type: 'PAUSE' }); // the other side still has its own 3
+    expect(await a.next()).toMatchObject({ type: 'PAUSED', by: 'npc', pausesLeft: 2 });
   });
 
   it('a pause that runs out gives the other side the win', async () => {
@@ -274,7 +296,7 @@ describe('game server', () => {
     const rejoined = await back.next();
     expect(rejoined).toMatchObject({ type: 'REJOINED', mySide: 'player', stage: startA.stage, rejoinToken: startA.rejoinToken });
     expect(rejoined.state.players.npc.hand.every((c) => c.type === null)).toBe(true);
-    expect(await b.next()).toEqual({ type: 'RESUMED' });
+    expect(await b.next()).toMatchObject({ type: 'RESUMED' });
     // the rejoined socket plays for its side again
     back.json({ type: 'ACTION', action: { type: 'DECLARE_SKILL', use: false } });
     let msg = await back.next();
@@ -318,15 +340,44 @@ describe('game server', () => {
     expect((await back.next()).state.result).toEqual({ winner: 'npc', reason: 'forfeit', cause: 'disconnect' });
   });
 
-  it('rejects an unknown or already-used rejoin token', async () => {
+  it('rejects an unknown rejoin token', async () => {
     await start();
-    const { startA } = await pair();
+    await pair();
     const c = await connect();
     c.json({ type: 'REJOIN', token: 'nope' });
     expect(await c.next()).toEqual({ type: 'ERROR', message: 'REJOIN_FAILED' });
-    const d = await connect();
-    d.json({ type: 'REJOIN', token: startA.rejoinToken }); // player is still connected
-    expect(await d.next()).toEqual({ type: 'ERROR', message: 'REJOIN_FAILED' });
+  });
+
+  it('a valid token takes the seat over from a connection the server still thinks is alive', async () => {
+    await start();
+    const { a, b, startA } = await pair();
+    const d = await connect(); // e.g. the phone after switching from Wi-Fi to 4G
+    d.json({ type: 'REJOIN', token: startA.rejoinToken });
+    const rejoined = await d.next();
+    expect(rejoined).toMatchObject({ type: 'REJOINED', mySide: 'player' });
+    expect(rejoined.phaseMsLeft).toBeGreaterThan(0); // the real time left in the phase
+    expect(rejoined.phaseMsLeft).toBeLessThanOrEqual(6000);
+    await closed(a); // the stale connection is dropped
+    expect(await b.nextWithin(200)).toBe('none'); // not treated as a disconnect
+  });
+
+  it('cancelling a search leaves the queue; cancelling right after being paired is leaving the match', async () => {
+    await start();
+    const a = await connect();
+    find(a);
+    await a.next(); // SEARCHING
+    a.json({ type: 'CANCEL_SEARCH' });
+    const b = await connect();
+    find(b);
+    expect(await b.next()).toEqual({ type: 'SEARCHING' }); // a is no longer waiting
+    const c = await connect();
+    find(c);
+    await c.next(); // MATCH_START (paired with b)
+    await b.next(); // MATCH_START
+    c.json({ type: 'CANCEL_SEARCH' }); // the pairing beat the cancel
+    let msg = await b.next();
+    while (msg.type !== 'STATE') msg = await b.next();
+    expect(msg.state.result).toEqual({ winner: 'player', reason: 'forfeit', cause: 'left' });
   });
 
   it('acts for the sender only and ignores client-sent timeouts', async () => {

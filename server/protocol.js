@@ -1,6 +1,6 @@
 // Pure helpers for the online server: payload validation, stage vote, and
 // per-side state redaction. No I/O here, so they are unit-testable directly.
-import { CARD_TYPES, DECK_SIZE, otherSide } from '../src/engine/constants.js';
+import { CARD_TYPES, DECK_SIZE, LEGACY_DECK_SIZE, otherSide } from '../src/engine/constants.js';
 import { CHARACTERS } from '../src/data/characters.js';
 import { STAGES, DEFAULT_STAGE } from '../src/data/stages.js';
 
@@ -25,7 +25,8 @@ export function validateSetup(msg) {
     composition[type] = n;
     total += n;
   }
-  if (total !== DECK_SIZE) return null;
+  // 9 cards; 7 still accepted from cached older clients (7 turns either way)
+  if (total !== DECK_SIZE && total !== LEGACY_DECK_SIZE) return null;
 
   const stageVote = msg.stageVote ?? DEFAULT_STAGE;
   if (!Object.hasOwn(STAGES, stageVote)) return null;

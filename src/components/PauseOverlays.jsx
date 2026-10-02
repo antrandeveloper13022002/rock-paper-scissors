@@ -16,7 +16,7 @@ function useCountdown(until) {
 
 // The pause window. Clicking outside the window (or Esc) = Continue.
 // `until`: online only — the moment the pause runs out and the match is lost.
-export function PauseModal({ until, online, onResume, onLeave }) {
+export function PauseModal({ until, online, pausesLeft, onResume, onLeave }) {
   const { t } = useT();
   const secondsLeft = useCountdown(until);
   const resumeRef = useRef(null);
@@ -44,7 +44,7 @@ export function PauseModal({ until, online, onResume, onLeave }) {
         </h2>
         {online && (
           <p className="m-0 text-base text-text-dim" aria-live="polite">
-            {t.pauseOnlineHint(secondsLeft ?? 0)}
+            {t.pauseOnlineHint(secondsLeft ?? 0)} {t.pausesLeft(pausesLeft)}
           </p>
         )}
         <Button

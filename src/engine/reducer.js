@@ -316,6 +316,12 @@ export function matchReducer(state, action) {
     // match), 'pauseTimeout' (paused too long), 'disconnect' (did not come back).
     case 'FORFEIT': {
       if (state.phase === PHASES.FINISHED) return state;
+      // The outcome is already decided during the reveal pause (5 points
+      // reached, or the last turn's scores): leaving now only ends the match
+      // with that result — it must not hand a decided match to the other side.
+      if (state.phase === PHASES.RESOLVED && (state.result || state.turnNumber >= TOTAL_TURNS)) {
+        return startNextTurn(state);
+      }
       const result = { winner: otherSide(action.side), reason: 'forfeit' };
       if (action.cause) result.cause = action.cause;
       return { ...state, phase: PHASES.FINISHED, result };

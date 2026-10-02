@@ -19,8 +19,10 @@ export function OnlineMatchScreen({
   stageId,
   notice,
   pauseInfo,
+  pausesLeft,
   reconnecting,
   matchError,
+  timerSync,
   send,
   onExit,
   onLeave,
@@ -31,7 +33,7 @@ export function OnlineMatchScreen({
 
   // Display-only countdown — the server's own timers advance the match. It
   // freezes while the match is paused or this client is reconnecting.
-  const secondsLeft = useTurnTimer(state.phase, state.turnNumber, undefined, frozen);
+  const secondsLeft = useTurnTimer(state.phase, state.turnNumber, undefined, frozen, timerSync);
 
   if (matchError) {
     return (
@@ -58,11 +60,12 @@ export function OnlineMatchScreen({
         notice={notice}
         secondsLeft={secondsLeft}
         onPause={frozen ? undefined : () => send({ type: 'PAUSE' })}
+        pausesLeft={pausesLeft}
         onExit={onExit}
       />
       {!finished && reconnecting && <PausedBanner kind="reconnecting" />}
       {!finished && !reconnecting && pauseInfo?.by === 'me' && pauseInfo.reason === 'pause' && (
-        <PauseModal online until={pauseInfo.until} onResume={() => send({ type: 'RESUME' })} onLeave={onLeave} />
+        <PauseModal online until={pauseInfo.until} pausesLeft={pausesLeft} onResume={() => send({ type: 'RESUME' })} onLeave={onLeave} />
       )}
       {!finished && !reconnecting && pauseInfo?.by === 'opp' && <PausedBanner kind={pauseInfo.reason} until={pauseInfo.until} />}
     </>

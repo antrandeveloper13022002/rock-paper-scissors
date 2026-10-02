@@ -1,5 +1,5 @@
 import { useLanguage } from './LanguageContext.jsx';
-import { DECK_SIZE, TOTAL_TURNS, WIN_SCORE } from '../engine/constants.js';
+import { DECK_SIZE, TOTAL_TURNS, WIN_SCORE, ONLINE_GRACE_SECONDS, ONLINE_MAX_PAUSES } from '../engine/constants.js';
 
 export const STRINGS = {
   vi: {
@@ -105,6 +105,7 @@ export const STRINGS = {
     leaveToMenu: 'Về trang chính',
     pauseOnlineHint: (s) => `Trận đấu đang dừng cho cả hai bên. Còn ${s} giây — hết giờ mà chưa tiếp tục thì đối thủ thắng.`,
     leaveForfeitHint: 'Rời trận lúc này sẽ bị xử thua.',
+    pausesLeft: (n) => `Còn ${n}/${ONLINE_MAX_PAUSES} lần tạm dừng.`,
     oppPaused: (s) => `Đối thủ đang tạm dừng — còn ${s}s`,
     oppDisconnected: (s) => `Đối thủ mất kết nối — chờ ${s}s`,
     reconnecting: 'Mất kết nối — đang kết nối lại...',
@@ -112,21 +113,21 @@ export const STRINGS = {
     rejoinTimeLeft: (s) => `còn ${s} giây để vào lại`,
     rejoinDetails: (me, opp, stage, turn, myScore, oppScore) =>
       `${me} vs ${opp} · ${stage} · Lượt ${turn}/${TOTAL_TURNS} · ${myScore}–${oppScore}`,
-    lastMatchEnded: 'Trận online vừa rồi đã kết thúc vì bạn không quay lại trong 30 giây.',
+    lastMatchEnded: `Trận online vừa rồi đã kết thúc vì bạn không quay lại trong ${ONLINE_GRACE_SECONDS} giây.`,
     viewLastResult: 'Xem kết quả',
     dismiss: 'Bỏ qua',
     rejoining: 'Đang vào lại trận...',
-    reconnectTimeout: 'Không kết nối lại được trong 30 giây — ván đấu đã kết thúc, bạn bị xử thua.',
+    reconnectTimeout: `Không kết nối lại được trong ${ONLINE_GRACE_SECONDS} giây — ván đấu đã kết thúc, bạn bị xử thua.`,
     reasonForfeit: {
       win: {
         left: 'vì đối thủ đã rời trận.',
-        pauseTimeout: 'vì đối thủ tạm dừng quá 30 giây.',
-        disconnect: 'vì đối thủ mất kết nối quá 30 giây.',
+        pauseTimeout: `vì đối thủ tạm dừng quá ${ONLINE_GRACE_SECONDS} giây.`,
+        disconnect: `vì đối thủ mất kết nối quá ${ONLINE_GRACE_SECONDS} giây.`,
       },
       lose: {
         left: 'vì bạn đã rời trận.',
-        pauseTimeout: 'vì bạn tạm dừng quá 30 giây.',
-        disconnect: 'vì bạn mất kết nối quá 30 giây.',
+        pauseTimeout: `vì bạn tạm dừng quá ${ONLINE_GRACE_SECONDS} giây.`,
+        disconnect: `vì bạn mất kết nối quá ${ONLINE_GRACE_SECONDS} giây.`,
       },
     },
     findMatch: 'Tìm trận ngẫu nhiên',
@@ -252,6 +253,7 @@ export const STRINGS = {
     leaveToMenu: 'Back to menu',
     pauseOnlineHint: (s) => `The match is paused for both players. ${s} seconds left — if you don't continue, your opponent wins.`,
     leaveForfeitHint: 'Leaving now counts as a loss.',
+    pausesLeft: (n) => `${n}/${ONLINE_MAX_PAUSES} pauses left.`,
     oppPaused: (s) => `Opponent paused — ${s}s left`,
     oppDisconnected: (s) => `Opponent disconnected — waiting ${s}s`,
     reconnecting: 'Connection lost — reconnecting...',
@@ -259,21 +261,21 @@ export const STRINGS = {
     rejoinTimeLeft: (s) => `${s} seconds left to rejoin`,
     rejoinDetails: (me, opp, stage, turn, myScore, oppScore) =>
       `${me} vs ${opp} · ${stage} · Round ${turn}/${TOTAL_TURNS} · ${myScore}–${oppScore}`,
-    lastMatchEnded: 'Your last online match ended because you did not come back within 30 seconds.',
+    lastMatchEnded: `Your last online match ended because you did not come back within ${ONLINE_GRACE_SECONDS} seconds.`,
     viewLastResult: 'View result',
     dismiss: 'Dismiss',
     rejoining: 'Rejoining the match...',
-    reconnectTimeout: 'Could not reconnect within 30 seconds — the match is over and counts as a loss.',
+    reconnectTimeout: `Could not reconnect within ${ONLINE_GRACE_SECONDS} seconds — the match is over and counts as a loss.`,
     reasonForfeit: {
       win: {
         left: 'because the opponent left the match.',
-        pauseTimeout: 'because the opponent stayed paused over 30 seconds.',
-        disconnect: 'because the opponent was disconnected over 30 seconds.',
+        pauseTimeout: `because the opponent stayed paused over ${ONLINE_GRACE_SECONDS} seconds.`,
+        disconnect: `because the opponent was disconnected over ${ONLINE_GRACE_SECONDS} seconds.`,
       },
       lose: {
         left: 'because you left the match.',
-        pauseTimeout: 'because you stayed paused over 30 seconds.',
-        disconnect: 'because you were disconnected over 30 seconds.',
+        pauseTimeout: `because you stayed paused over ${ONLINE_GRACE_SECONDS} seconds.`,
+        disconnect: `because you were disconnected over ${ONLINE_GRACE_SECONDS} seconds.`,
       },
     },
     findMatch: 'Find a random match',

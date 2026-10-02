@@ -5,14 +5,12 @@ import { OnlineLobby } from './OnlineLobby.jsx';
 import { OnlineMatchScreen } from './OnlineMatchScreen.jsx';
 import { Button } from './Button.jsx';
 import { WS_URL } from '../net/config.js';
-import { saveRejoin, clearRejoin } from '../net/rejoin.js';
+import { saveRejoin, clearRejoin, REJOIN_WINDOW_MS } from '../net/rejoin.js';
 import { useT } from '../i18n/strings.js';
 import { STAGES } from '../data/stages.js';
-import { PHASES } from '../engine/constants.js';
+import { PHASES, otherSide } from '../engine/constants.js';
 
 const STEPS = { CHARACTER: 'character', DECK: 'deck', LOBBY: 'lobby', MATCH: 'match', REJOIN: 'rejoin' };
-// The server holds a dropped seat for 30 s (BR-ONLINE-03); keep retrying for that long.
-const RECONNECT_WINDOW_MS = 30 * 1000;
 const RECONNECT_EVERY_MS = 2000;
 
 // Owns the whole "play online" flow end to end: pick a character/deck, then
@@ -36,13 +34,20 @@ export function OnlineFlow({ onExit, onStage, onBrowse, rejoinToken = null }) {
   const [matchData, setMatchData] = useState(null);
   const [matchState, setMatchState] = useState(null);
   const [pauseInfo, setPauseInfo] = useState(null); // { by: 'me'|'opp', reason, until }
+  const [pausesLeft, setPausesLeft] = useState(0); // my manual pauses left this match
   const [reconnecting, setReconnecting] = useState(false);
   const [matchError, setMatchError] = useState(null);
+  // reconnecting ran out of time: the match is lost, but its token is kept so
+  // the menu can still show the result
+  const [timedOut, setTimedOut] = useState(false);
+  // the server's real time left in the phase: { turn, phase, seconds }
+  const [timerSync, setTimerSync] = useState(null);
 
   const socketRef = useRef(null);
   const mySideRef = useRef(null);
   const tokenRef = useRef(rejoinToken);
   const finishedRef = useRef(false);
+  const matchStateRef = useRef(null);
   const reconnectDeadline = useRef(0); // 0 = not reconnecting
   const reconnectTimer = useRef(null);
   // handleDrop runs from socket callbacks created on earlier renders, so it
@@ -50,7 +55,8 @@ export function OnlineFlow({ onExit, onStage, onBrowse, rejoinToken = null }) {
   const stepRef = useRef(step);
   useEffect(() => {
     stepRef.current = step;
-  }, [step]);
+    matchStateRef.current = matchState;
+  }, [step, matchState]);
 
   // Preview the vote as the backdrop while in the lobby; the match itself
   // reports the server-picked stage from MATCH_START.
@@ -66,19 +72,19 @@ export function OnlineFlow({ onExit, onStage, onBrowse, rejoinToken = null }) {
   // Keep the rejoin token (and a summary of the match, for the menu) fresh
   // while the match is open, so a closed tab can come back within the server's
   // grace window. Saved again when the page is hidden/closed, so the menu's
-  // countdown starts from the real moment the player left.
-  const matchOpen = step === STEPS.MATCH && matchState && matchState.phase !== PHASES.FINISHED;
+  // countdown starts from the real moment the player left. Not after the
+  // reconnect window ran out: the menu must then say the match has ended.
+  const matchOpen = step === STEPS.MATCH && matchState && matchState.phase !== PHASES.FINISHED && !matchError;
   const summaryRef = useRef(null);
   if (matchData && matchState) {
     const mySide = matchData.mySide;
-    const oppSide = mySide === 'player' ? 'npc' : 'player';
     summaryRef.current = {
       me: matchData.myCharacter.id,
       opp: matchData.oppCharacter.id,
       stage: matchData.stage,
       turn: matchState.turnNumber,
       myScore: matchState.players[mySide].score,
-      oppScore: matchState.players[oppSide].score,
+      oppScore: matchState.players[otherSide(mySide)].score,
     };
   }
   useEffect(() => {
@@ -110,11 +116,17 @@ export function OnlineFlow({ onExit, onStage, onBrowse, rejoinToken = null }) {
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
   };
 
+  const syncTimer = (state, phaseMsLeft) => {
+    if (phaseMsLeft == null || !state) return;
+    setTimerSync({ turn: state.turnNumber, phase: state.phase, seconds: Math.ceil(phaseMsLeft / 1000) });
+  };
+
   const enterMatch = (msg, isRejoin) => {
     mySideRef.current = msg.mySide;
     tokenRef.current = msg.rejoinToken;
     finishedRef.current = msg.state.phase === PHASES.FINISHED;
-    const oppSide = msg.mySide === 'player' ? 'npc' : 'player';
+    if (finishedRef.current) clearRejoin(); // came back to a match that is already over
+    const oppSide = otherSide(msg.mySide);
     const votes = [msg.stageVotes?.player, msg.stageVotes?.npc].filter(Boolean);
     const name = (id) => STAGES[id]?.name[lang] ?? id;
     onStage?.(msg.stage, true);
@@ -132,9 +144,12 @@ export function OnlineFlow({ onExit, onStage, onBrowse, rejoinToken = null }) {
       oppComposition: msg.mySide === 'player' ? msg.npcComposition : msg.playerComposition,
     });
     setMatchState(msg.state);
+    setPausesLeft(msg.pausesLeft ?? 0);
+    syncTimer(msg.state, msg.phaseMsLeft);
     reconnectDeadline.current = 0;
     setReconnecting(false);
     setMatchError(null);
+    setTimedOut(false);
     clearTimeout(reconnectTimer.current);
     setStep(STEPS.MATCH);
   };
@@ -154,9 +169,12 @@ export function OnlineFlow({ onExit, onStage, onBrowse, rejoinToken = null }) {
         clearRejoin(); // nothing left to rejoin
       }
     } else if (msg.type === 'PAUSED') {
+      if (msg.by === mySideRef.current && msg.reason === 'pause') setPausesLeft(msg.pausesLeft);
       setPauseInfo({ by: msg.by === mySideRef.current ? 'me' : 'opp', reason: msg.reason, until: Date.now() + msg.seconds * 1000 });
-    } else if (msg.type === 'RESUMED') setPauseInfo(null);
-    else if (msg.type === 'ERROR') {
+    } else if (msg.type === 'RESUMED') {
+      setPauseInfo(null);
+      syncTimer(matchStateRef.current, msg.phaseMsLeft);
+    } else if (msg.type === 'ERROR') {
       const text = t.serverErrors[msg.message] ?? t.connectionError;
       if (msg.message === 'REJOIN_FAILED') {
         clearRejoin();
@@ -201,13 +219,14 @@ export function OnlineFlow({ onExit, onStage, onBrowse, rejoinToken = null }) {
       if (stepRef.current === STEPS.REJOIN) setMatchError(t.connectionError);
       return;
     }
-    if (!reconnectDeadline.current) reconnectDeadline.current = Date.now() + RECONNECT_WINDOW_MS;
+    if (!reconnectDeadline.current) reconnectDeadline.current = Date.now() + REJOIN_WINDOW_MS;
     setReconnecting(true);
     if (Date.now() > reconnectDeadline.current) {
       // The server has given the win to the opponent by now; it keeps the
       // result, so the menu can still show it once the network is back.
       reconnectDeadline.current = 0;
       setReconnecting(false);
+      setTimedOut(true);
       setMatchError(t.reconnectTimeout);
       return;
     }
@@ -216,7 +235,7 @@ export function OnlineFlow({ onExit, onStage, onBrowse, rejoinToken = null }) {
   };
 
   // Opened from the menu's "rejoin" button. Exactly once: a second socket
-  // (e.g. StrictMode re-running effects) would find the seat already taken.
+  // (e.g. StrictMode re-running effects) would only bounce the first one.
   const rejoinStarted = useRef(false);
   useEffect(() => {
     if (step !== STEPS.REJOIN || !rejoinToken || rejoinStarted.current) return;
@@ -288,7 +307,9 @@ export function OnlineFlow({ onExit, onStage, onBrowse, rejoinToken = null }) {
         onStageVote={setStageVote}
         onFindMatch={() => connect((ws) => ws.send(setupMsg('FIND_MATCH')))}
         onCancelSearch={() => {
-          // cancelling a search = closing the connection; the server drops us from the queue
+          // Tell the server first: if a pairing already happened, it counts as
+          // leaving that match right away instead of a 30 s "disconnected" wait.
+          send({ type: 'CANCEL_SEARCH' });
           closeSocket();
           setLobbyStatus('idle');
         }}
@@ -309,7 +330,7 @@ export function OnlineFlow({ onExit, onStage, onBrowse, rejoinToken = null }) {
         <p className={`m-0 text-xl ${matchError ? 'text-danger' : 'animate-pulse'}`} aria-live="polite">
           {matchError ?? t.rejoining}
         </p>
-        <Button variant={matchError ? 'primary' : 'ghost'} onClick={exitToMenu}>
+        <Button variant={matchError ? 'primary' : 'ghost'} onClick={() => exitToMenu()}>
           {t.backToMenu}
         </Button>
       </div>
@@ -328,10 +349,12 @@ export function OnlineFlow({ onExit, onStage, onBrowse, rejoinToken = null }) {
         stageId={matchData.stage}
         notice={matchData.stageNotice}
         pauseInfo={pauseInfo}
+        pausesLeft={pausesLeft}
         reconnecting={reconnecting}
         matchError={matchError}
+        timerSync={timerSync}
         send={send}
-        onExit={() => exitToMenu(matchError === t.reconnectTimeout)}
+        onExit={() => exitToMenu(timedOut)}
         onLeave={leaveMatch}
       />
     );
