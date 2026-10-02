@@ -44,12 +44,12 @@ function VoxelGlyph({ name, color, groupRef }) {
   );
 }
 
-function OneSkill({ by, type, color, lights }) {
+function OneSkill({ by, type, color, lights, xScale = 1 }) {
   const glyph = useRef();
   const burst = useRef();
   const light = useRef();
   const t0 = useRef(null);
-  const x = SIDE_X[by];
+  const x = SIDE_X[by] * xScale;
   const dirs = useMemo(
     () => Array.from({ length: PARTICLES }, (_, i) => {
       const a = (i / PARTICLES) * Math.PI * 2;
@@ -97,7 +97,7 @@ function OneSkill({ by, type, color, lights }) {
 }
 
 // `skills` = [{ by: 'me'|'opp', type, color }], replayed whenever `skillKey` changes.
-export function SkillFx({ skills, skillKey, lights }) {
+export function SkillFx({ skills, skillKey, lights, xScale }) {
   if (!skills?.length) return null;
-  return skills.map((s, i) => <OneSkill key={`${skillKey}-${i}`} {...s} lights={lights} />);
+  return skills.map((s, i) => <OneSkill key={`${skillKey}-${i}`} {...s} lights={lights} xScale={xScale} />);
 }

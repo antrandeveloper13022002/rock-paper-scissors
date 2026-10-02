@@ -24,3 +24,13 @@ test('capture screens for design review', async ({ page }) => {
   await page.waitForTimeout(300);
   await shot('05-match-choose');
 });
+
+test('capture the match on a phone screen', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await page.getByRole('button', { name: /chơi với máy/i }).click();
+  await page.getByRole('button', { name: /tiếp tục ›/i }).click();
+  await page.getByRole('button', { name: /vào trận/i }).click();
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: 'test-results/screens/06-match-phone.png' });
+});

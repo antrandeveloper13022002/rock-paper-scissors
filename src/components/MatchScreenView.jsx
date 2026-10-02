@@ -183,13 +183,13 @@ export function MatchScreenView({
         </section>
 
         <div className="flex-1 flex flex-col items-center gap-1.5 [text-shadow:2px_2px_0_#2a1a10]">
-          <div className="flex items-center gap-2.5 text-xl sm:text-2xl">
-            <span className="text-accent-blue">{phaseLabel}</span>
-            <span>
+          <div className="flex flex-wrap justify-center items-center gap-x-2.5 text-lg sm:text-2xl">
+            <span className="text-accent-blue whitespace-nowrap">{phaseLabel}</span>
+            <span className="whitespace-nowrap">
               · {t.turn} {state.turnNumber}/7 ·
             </span>
             {state.phase !== PHASES.RESOLVED && state.phase !== PHASES.FINISHED && (
-              <span className={secondsLeft <= 5 ? 'text-danger' : ''}>
+              <span className={`whitespace-nowrap ${secondsLeft <= 5 ? 'text-danger' : ''}`}>
                 <span aria-hidden="true">⏳</span> {secondsLeft}s
               </span>
             )}
