@@ -9,10 +9,12 @@ export const BEATS = {
   bao: 'bua',
 };
 
-export const DECK_SIZE = 7;
+export const DECK_SIZE = 9;
 export const INITIAL_HAND_SIZE = 3;
 export const WIN_SCORE = 5;
-export const TOTAL_TURNS = DECK_SIZE;
+// 7 turns from a 9-card deck: 2 cards are never played, so neither hand is
+// fully known until the last turn.
+export const TOTAL_TURNS = 7;
 
 export const SKILL_PHASE_SECONDS = 6;
 export const CHOOSE_PHASE_SECONDS = 14;

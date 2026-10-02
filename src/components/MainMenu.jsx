@@ -3,10 +3,11 @@ import { useT } from '../i18n/strings.js';
 import { sfx } from '../audio/sfx.js';
 import { Button } from './Button.jsx';
 import { TutorialModal } from './TutorialModal.jsx';
+import { RejoinCard } from './RejoinCard.jsx';
 
 // Design board 01: big pixel title, wood panel with the three choices; the 3D
 // scene (castle + two idle characters) fills the rest.
-export function MainMenu({ onStart, onPlayOnline }) {
+export function MainMenu({ onStart, onPlayOnline, onRejoin }) {
   const { t } = useT();
   const [showTutorial, setShowTutorial] = useState(false);
 
@@ -18,6 +19,8 @@ export function MainMenu({ onStart, onPlayOnline }) {
         </h1>
         <p className="m-0 text-2xl sm:text-4xl tracking-[10px] [text-shadow:4px_4px_0_#2a1a10]">{t.titleSub}</p>
       </div>
+
+      <RejoinCard onRejoin={onRejoin} />
 
       <nav className="w-full max-w-[380px] bg-gradient-to-b from-panel-top to-panel-bot pixel-panel p-6 flex flex-col gap-4">
         <Button

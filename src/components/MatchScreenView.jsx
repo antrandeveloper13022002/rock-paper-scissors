@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef, useState } from 'react';
-import { PHASES, WIN_SCORE, SKILL_PHASE_SECONDS, CHOOSE_PHASE_SECONDS, otherSide } from '../engine/constants.js';
+import { PHASES, WIN_SCORE, TOTAL_TURNS, SKILL_PHASE_SECONDS, CHOOSE_PHASE_SECONDS, otherSide } from '../engine/constants.js';
 import { SKILLS } from '../data/skills.js';
 import { CHARACTER_SPRITES } from '../data/characterSprites.js';
 import { Sprite } from './Sprite.jsx';
@@ -49,6 +49,7 @@ export function MatchScreenView({
   myComposition,
   stageId,
   notice,
+  onPause,
   secondsLeft,
   onExit,
 }) {
@@ -92,9 +93,13 @@ export function MatchScreenView({
   // Only on RESOLVED: lastRound is still set in FINISHED, which would replay it.
   useEffect(() => {
     if (state.phase !== PHASES.RESOLVED || !state.lastRound) return;
-    if (state.lastRound.winnerSide === null) sfx.drawRound();
-    else if (state.lastRound.winnerSide === mySide) sfx.winRound();
-    else sfx.loseRound();
+    const { playerCard, npcCard, winnerSide } = state.lastRound;
+    const winType = winnerSide === 'player' ? playerCard.type : npcCard.type;
+    const loseType = winnerSide === 'player' ? npcCard.type : playerCard.type;
+    sfx.roundResult(
+      winnerSide === null ? 'draw' : `${winType}-${loseType}`,
+      winnerSide === null ? 'draw' : winnerSide === mySide ? 'win' : 'lose'
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.turnNumber, state.phase]);
 
@@ -186,7 +191,7 @@ export function MatchScreenView({
           <div className="flex flex-wrap justify-center items-center gap-x-2.5 text-lg sm:text-2xl">
             <span className="text-accent-blue whitespace-nowrap">{phaseLabel}</span>
             <span className="whitespace-nowrap">
-              · {t.turn} {state.turnNumber}/7 ·
+              · {t.turn} {state.turnNumber}/{TOTAL_TURNS} ·
             </span>
             {state.phase !== PHASES.RESOLVED && state.phase !== PHASES.FINISHED && (
               <span className={`whitespace-nowrap ${secondsLeft <= 5 ? 'text-danger' : ''}`}>
@@ -201,6 +206,19 @@ export function MatchScreenView({
                 style={{ width: `${Math.max(0, (secondsLeft / phaseSeconds) * 100)}%` }}
               />
             </div>
+          )}
+          {onPause && state.phase !== PHASES.FINISHED && (
+            <button
+              type="button"
+              className="pointer-events-auto mt-0.5 px-3 py-1 border-0 cursor-pointer font-mono text-base text-[#f3e2b8] bg-[#4d4858] shadow-[0_0_0_3px_#2a1a10,inset_0_-3px_0_#353140] hover:brightness-110"
+              onClick={() => {
+                sfx.click();
+                onPause();
+              }}
+            >
+              <span aria-hidden="true">⏸ </span>
+              {t.pause}
+            </button>
           )}
           {state.log.length > 0 && (
             <div className="flex gap-1" title={t.turnHistory}>
@@ -310,7 +328,7 @@ export function MatchScreenView({
                   locked={c.id === me.lockedCardId}
                   justDrawn={justDrawnIds.has(c.id)}
                   onClick={() => {
-                    sfx.select();
+                    sfx.card(c.type);
                     dispatch({ type: 'SELECT_CARD', side: mySide, cardId: c.id });
                   }}
                 />

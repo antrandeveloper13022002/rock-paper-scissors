@@ -5,7 +5,7 @@ import { validateSetup, pickStage, redactFor } from './protocol.js';
 import { createMatch } from '../src/engine/reducer.js';
 import { CHARACTERS } from '../src/data/characters.js';
 
-const COMP = { keo: 3, bua: 2, bao: 2 };
+const COMP = { keo: 3, bua: 3, bao: 3 };
 
 describe('validateSetup', () => {
   it('accepts a valid setup and uses the server copy of the character', () => {
@@ -185,6 +185,148 @@ describe('game server', () => {
     room.state = { ...room.state, phase: 'finished' };
     a.close();
     expect(await b.nextWithin(300)).toBe('none');
+  });
+
+  const find = (ws, vote = 'am-anh') => ws.json({ type: 'FIND_MATCH', characterId: 'loi-long', composition: COMP, stageVote: vote });
+
+  it('random matchmaking pairs the next searcher with the waiting one', async () => {
+    await start({ rng: () => 0.1 });
+    const a = await connect();
+    find(a, 'am-anh');
+    expect(await a.next()).toEqual({ type: 'SEARCHING' });
+    const b = await connect();
+    find(b, 'phap-su');
+    const [sa, sb] = [await a.next(), await b.next()];
+    expect(sa.type).toBe('MATCH_START');
+    expect(sb.type).toBe('MATCH_START');
+    expect([sa.mySide, sb.mySide]).toEqual(['player', 'npc']);
+    expect(sa.stage).toBe('am-anh');
+    expect(sb.stage).toBe('am-anh');
+  });
+
+  it('a searcher who disconnects is dropped from the queue', async () => {
+    await start();
+    const a = await connect();
+    find(a);
+    await a.next();
+    a.close();
+    await new Promise((r) => setTimeout(r, 50));
+    const b = await connect();
+    find(b);
+    expect(await b.next()).toEqual({ type: 'SEARCHING' });
+  });
+
+  it('a search times out and a second FIND_MATCH from the same player is ignored', async () => {
+    await start({ waitingRoomTtlMs: 150 });
+    const a = await connect();
+    find(a);
+    expect(await a.next()).toEqual({ type: 'SEARCHING' });
+    find(a);
+    expect(await a.next()).toEqual({ type: 'ERROR', message: 'SEARCH_EXPIRED' });
+    const b = await connect();
+    find(b);
+    expect(await b.next()).toEqual({ type: 'SEARCHING' });
+  });
+
+  it('a pause freezes the match for both and RESUME continues it', async () => {
+    await start();
+    const { a, b } = await pair();
+    a.json({ type: 'PAUSE' });
+    expect(await a.next()).toMatchObject({ type: 'PAUSED', by: 'player', reason: 'pause' });
+    expect(await b.next()).toMatchObject({ type: 'PAUSED', by: 'player', reason: 'pause' });
+    b.json({ type: 'ACTION', action: { type: 'DECLARE_SKILL', use: false } }); // frozen: ignored
+    expect(await b.nextWithin(200)).toBe('none');
+    b.json({ type: 'RESUME' }); // only the side that paused can resume
+    expect(await b.nextWithin(200)).toBe('none');
+    a.json({ type: 'RESUME' });
+    expect(await a.next()).toEqual({ type: 'RESUMED' });
+    expect(await b.next()).toEqual({ type: 'RESUMED' });
+  });
+
+  it('a pause that runs out gives the other side the win', async () => {
+    await start({ pauseLimitMs: 150 });
+    const { a, b } = await pair();
+    a.json({ type: 'PAUSE' });
+    await a.next();
+    await b.next();
+    const end = await b.next();
+    expect(end.state.result).toMatchObject({ winner: 'npc', reason: 'forfeit' });
+  });
+
+  it('leaving the match (FORFEIT) gives the other side the win', async () => {
+    await start();
+    const { a, b } = await pair();
+    a.json({ type: 'PAUSE' });
+    await b.next();
+    a.json({ type: 'ACTION', action: { type: 'FORFEIT', side: 'npc' } }); // side comes from the socket
+    let msg = await b.next();
+    while (msg.type !== 'STATE') msg = await b.next();
+    expect(msg.state.result).toEqual({ winner: 'npc', reason: 'forfeit', cause: 'left' });
+  });
+
+  it('a dropped player can rejoin within the limit with their token', async () => {
+    await start({ pauseLimitMs: 2000 });
+    const { a, b, startA } = await pair();
+    a.close();
+    expect(await b.next()).toMatchObject({ type: 'PAUSED', by: 'player', reason: 'disconnect' });
+    const back = await connect();
+    back.json({ type: 'REJOIN', token: startA.rejoinToken });
+    const rejoined = await back.next();
+    expect(rejoined).toMatchObject({ type: 'REJOINED', mySide: 'player', stage: startA.stage, rejoinToken: startA.rejoinToken });
+    expect(rejoined.state.players.npc.hand.every((c) => c.type === null)).toBe(true);
+    expect(await b.next()).toEqual({ type: 'RESUMED' });
+    // the rejoined socket plays for its side again
+    back.json({ type: 'ACTION', action: { type: 'DECLARE_SKILL', use: false } });
+    let msg = await back.next();
+    while (msg.type !== 'STATE') msg = await back.next();
+    expect(msg.state.players.player.skillDeclaredThisTurn).toBe(false); // own view (the opponent's is redacted)
+  });
+
+  it('a dropped player who does not come back loses', async () => {
+    await start({ pauseLimitMs: 150 });
+    const { a, b } = await pair();
+    a.close();
+    await b.next(); // PAUSED
+    const end = await b.next();
+    expect(end.state.result).toMatchObject({ winner: 'npc', reason: 'forfeit' });
+  });
+
+  it('a player back too late still gets the final result, with the cause', async () => {
+    await start({ pauseLimitMs: 100 });
+    const { a, b, startA } = await pair();
+    a.close();
+    await b.next(); // PAUSED
+    expect((await b.next()).state.result).toEqual({ winner: 'npc', reason: 'forfeit', cause: 'disconnect' });
+    b.close(); // room cleaned up once both are gone
+    await new Promise((r) => setTimeout(r, 50));
+    const late = await connect();
+    late.json({ type: 'REJOIN', token: startA.rejoinToken });
+    const msg = await late.next();
+    expect(msg.type).toBe('REJOINED');
+    expect(msg.state.result).toEqual({ winner: 'npc', reason: 'forfeit', cause: 'disconnect' });
+  });
+
+  it('if both drop, the one who dropped first loses', async () => {
+    await start();
+    const { a, b, startB } = await pair();
+    a.close();
+    await b.next(); // PAUSED (a dropped first)
+    b.close();
+    await new Promise((r) => setTimeout(r, 50));
+    const back = await connect();
+    back.json({ type: 'REJOIN', token: startB.rejoinToken });
+    expect((await back.next()).state.result).toEqual({ winner: 'npc', reason: 'forfeit', cause: 'disconnect' });
+  });
+
+  it('rejects an unknown or already-used rejoin token', async () => {
+    await start();
+    const { startA } = await pair();
+    const c = await connect();
+    c.json({ type: 'REJOIN', token: 'nope' });
+    expect(await c.next()).toEqual({ type: 'ERROR', message: 'REJOIN_FAILED' });
+    const d = await connect();
+    d.json({ type: 'REJOIN', token: startA.rejoinToken }); // player is still connected
+    expect(await d.next()).toEqual({ type: 'ERROR', message: 'REJOIN_FAILED' });
   });
 
   it('acts for the sender only and ignores client-sent timeouts', async () => {

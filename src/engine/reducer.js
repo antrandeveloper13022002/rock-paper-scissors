@@ -311,6 +311,16 @@ export function matchReducer(state, action) {
       return startNextTurn(state);
     }
 
+    // A side concedes: the other side wins immediately (BR-ONLINE-02/03).
+    // `cause` (optional) says why, for the result screen: 'left' (left the
+    // match), 'pauseTimeout' (paused too long), 'disconnect' (did not come back).
+    case 'FORFEIT': {
+      if (state.phase === PHASES.FINISHED) return state;
+      const result = { winner: otherSide(action.side), reason: 'forfeit' };
+      if (action.cause) result.cause = action.cause;
+      return { ...state, phase: PHASES.FINISHED, result };
+    }
+
     default:
       return state;
   }

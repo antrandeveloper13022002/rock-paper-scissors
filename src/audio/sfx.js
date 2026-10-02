@@ -80,13 +80,91 @@ function tone({ freq, duration = 0.12, type = 'square', volume = 0.18, startAt =
   osc.onended = () => activeNodes.delete(node);
 }
 
-function sequence(notes) {
-  let t = 0;
+function sequence(notes, startAt = 0) {
+  let t = startAt;
   notes.forEach(([freq, duration, type]) => {
     tone({ freq, duration, type: type || 'square', startAt: t });
     t += duration * 0.9;
   });
 }
+
+// Filtered white-noise burst (snips, rips, thuds) — one shared noise buffer.
+let noiseBuffer = null;
+function noise({ duration = 0.12, volume = 0.15, startAt = 0, filter = 'bandpass', freq = 2000, q = 1, sweepTo = null }) {
+  const audio = getContext();
+  if (!audio || muted) return;
+  if (!noiseBuffer) {
+    noiseBuffer = audio.createBuffer(1, audio.sampleRate, audio.sampleRate);
+    const data = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < data.length; i += 1) data[i] = Math.random() * 2 - 1;
+  }
+  const src = audio.createBufferSource();
+  src.buffer = noiseBuffer;
+  const bq = audio.createBiquadFilter();
+  bq.type = filter;
+  bq.Q.value = q;
+  const gain = audio.createGain();
+  const t0 = audio.currentTime + startAt;
+  bq.frequency.setValueAtTime(freq, t0);
+  if (sweepTo) bq.frequency.exponentialRampToValueAtTime(sweepTo, t0 + duration);
+  gain.gain.setValueAtTime(0, t0);
+  gain.gain.linearRampToValueAtTime(volume, t0 + 0.005);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+  src.connect(bq);
+  bq.connect(gain);
+  gain.connect(audio.destination);
+  src.start(t0);
+  src.stop(t0 + duration + 0.02);
+  const node = { osc: src, gain }; // same shape as tone() so mute can cut it
+  activeNodes.add(node);
+  src.onended = () => activeNodes.delete(node);
+}
+
+// Picking a card: each type has its own voice.
+const CARD_SOUNDS = {
+  keo: () => {
+    // scissors: two quick metallic snips
+    noise({ duration: 0.05, volume: 0.16, filter: 'highpass', freq: 4000 });
+    tone({ freq: 1800, duration: 0.04, type: 'square', volume: 0.06, glideTo: 1200 });
+    noise({ duration: 0.05, volume: 0.16, filter: 'highpass', freq: 4500, startAt: 0.07 });
+  },
+  bua: () => {
+    // hammer: heavy wooden knock
+    tone({ freq: 140, duration: 0.12, type: 'triangle', volume: 0.22, glideTo: 70 });
+    noise({ duration: 0.06, volume: 0.12, filter: 'lowpass', freq: 900 });
+  },
+  bao: () => {
+    // sack: soft burlap rustle
+    noise({ duration: 0.18, volume: 0.12, filter: 'bandpass', freq: 1200, q: 0.7, sweepTo: 600 });
+  },
+};
+
+// The clash itself at reveal (BR-3D-06), one per matchup.
+const CLASH_SOUNDS = {
+  // Búa đập vỡ Kéo: thud + metal ring + shards
+  'bua-keo': (t) => {
+    tone({ freq: 110, duration: 0.25, type: 'triangle', volume: 0.25, glideTo: 50, startAt: t });
+    tone({ freq: 1320, duration: 0.35, type: 'square', volume: 0.05, glideTo: 880, startAt: t });
+    noise({ duration: 0.3, volume: 0.18, filter: 'highpass', freq: 3000, startAt: t + 0.02 });
+  },
+  // Kéo cắt đôi Bao: snip-snip then a cloth rip
+  'keo-bao': (t) => {
+    noise({ duration: 0.04, volume: 0.18, filter: 'highpass', freq: 5000, startAt: t });
+    noise({ duration: 0.04, volume: 0.18, filter: 'highpass', freq: 5000, startAt: t + 0.08 });
+    noise({ duration: 0.3, volume: 0.16, filter: 'bandpass', freq: 3000, q: 0.8, sweepTo: 800, startAt: t + 0.14 });
+  },
+  // Bao trùm gói Búa: muffled whoomp as the sack closes
+  'bao-bua': (t) => {
+    tone({ freq: 300, duration: 0.3, type: 'sine', volume: 0.22, glideTo: 70, startAt: t });
+    noise({ duration: 0.25, volume: 0.14, filter: 'lowpass', freq: 600, sweepTo: 150, startAt: t });
+  },
+  // Hòa: two cards clash and bounce
+  draw: (t) => {
+    tone({ freq: 660, duration: 0.12, type: 'square', volume: 0.08, startAt: t });
+    tone({ freq: 698, duration: 0.12, type: 'square', volume: 0.08, startAt: t });
+    noise({ duration: 0.08, volume: 0.14, filter: 'bandpass', freq: 2500, startAt: t });
+  },
+};
 
 // ── Background music: one looping 4-bar chiptune per stage (BR-3D-04) ──────
 // Notes are written as names ('A4', '.' = rest); each theme is 4 bass notes
@@ -183,6 +261,16 @@ export const sfx = {
   winRound: () => sequence([[520, 0.09], [700, 0.14]]),
   loseRound: () => sequence([[300, 0.1], [180, 0.18]]),
   drawRound: () => tone({ freq: 260, duration: 0.16, type: 'triangle', volume: 0.13 }),
+  card: (type) => CARD_SOUNDS[type]?.(),
+  // Reveal: the matchup's own sound at the moment of impact (≈ the 3D hit),
+  // then the win/lose/draw sting for the viewer. `kind` = 'bua-keo' |
+  // 'keo-bao' | 'bao-bua' | 'draw'; `outcome` = 'win' | 'lose' | 'draw'.
+  roundResult: (kind, outcome) => {
+    CLASH_SOUNDS[kind]?.(0.35);
+    if (outcome === 'win') sequence([[520, 0.09], [700, 0.14]], 0.9);
+    else if (outcome === 'lose') sequence([[300, 0.1], [180, 0.18]], 0.9);
+    else tone({ freq: 260, duration: 0.16, type: 'triangle', volume: 0.13, startAt: 0.9 });
+  },
   matchWin: () => sequence([[523, 0.1], [659, 0.1], [784, 0.1], [1046, 0.24]]),
   matchLose: () => sequence([[392, 0.14], [330, 0.14], [262, 0.28]]),
 };

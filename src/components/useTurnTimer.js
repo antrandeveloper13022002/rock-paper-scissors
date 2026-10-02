@@ -10,13 +10,17 @@ function durationFor(phase) {
 // dispatch is optional: pass it in local/NPC mode to auto-timeout the turn.
 // Omit it for server-authoritative online mode, where this becomes a display-only
 // countdown and the server's own timer is what actually advances the match.
-export function useTurnTimer(phase, turnNumber, dispatch) {
+// `paused` freezes the countdown where it is; it resumes from there.
+export function useTurnTimer(phase, turnNumber, dispatch, paused = false) {
   const [secondsLeft, setSecondsLeft] = useState(durationFor(phase));
 
+  // a new phase / turn restarts the countdown
   useEffect(() => {
-    if (phase !== PHASES.SKILL && phase !== PHASES.CHOOSE) return undefined;
-
     setSecondsLeft(durationFor(phase));
+  }, [phase, turnNumber]);
+
+  useEffect(() => {
+    if (paused || (phase !== PHASES.SKILL && phase !== PHASES.CHOOSE)) return undefined;
     const intervalId = setInterval(() => {
       setSecondsLeft((prev) => {
         if (prev <= 1) {
@@ -30,7 +34,7 @@ export function useTurnTimer(phase, turnNumber, dispatch) {
 
     return () => clearInterval(intervalId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, turnNumber]);
+  }, [phase, turnNumber, paused]);
 
   return secondsLeft;
 }

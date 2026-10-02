@@ -86,3 +86,17 @@ test('online: two players vote different stages and see the same pick', async ({
   await expect(b.getByText(notice)).toBeVisible();
   expect(await a.getByText(notice).textContent()).toBe(await b.getByText(notice).textContent());
 });
+
+test('online: random matchmaking pairs two searching players', async ({ browser }) => {
+  const pages = [await (await browser.newContext()).newPage(), await (await browser.newContext()).newPage()];
+  for (const p of pages) {
+    await p.goto('/');
+    await p.getByRole('button', { name: /chơi trực tuyến/i }).click();
+    await p.getByRole('button', { name: /tiếp tục ›/i }).click();
+    await p.getByRole('button', { name: /vào trận/i }).click();
+  }
+  await pages[0].getByRole('button', { name: /tìm trận ngẫu nhiên/i }).click();
+  await expect(pages[0].getByText(/đang tìm đối thủ/i)).toBeVisible();
+  await pages[1].getByRole('button', { name: /tìm trận ngẫu nhiên/i }).click();
+  for (const p of pages) await expect(p.getByText(/pha kỹ năng|pha chọn bài/i)).toBeVisible({ timeout: 10_000 });
+});

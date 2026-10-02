@@ -13,7 +13,7 @@ function TableCard({ type, index, count }) {
   const tilt = (index - (count - 1) / 2) * 4;
   return (
     <div
-      className="w-[46px] h-[66px] sm:w-[92px] sm:h-[130px] flex flex-col items-center justify-center gap-1 animate-card-draw-in"
+      className="w-[32px] h-[46px] sm:w-[92px] sm:h-[130px] flex flex-col items-center justify-center gap-1 animate-card-draw-in"
       style={{
         background: '#3b2718',
         boxShadow: '0 0 0 3px #2a1a10, inset 0 0 0 3px #6b4428, 0 10px 0 3px rgba(0,0,0,.35)',
@@ -24,7 +24,7 @@ function TableCard({ type, index, count }) {
         <Sprite rects={CARD_SPRITES[type].rects} size={52} />
       </span>
       <span className="sm:hidden">
-        <Sprite rects={CARD_SPRITES[type].rects} size={30} />
+        <Sprite rects={CARD_SPRITES[type].rects} size={22} />
       </span>
     </div>
   );
@@ -33,7 +33,7 @@ function TableCard({ type, index, count }) {
 // Design board 03: cards laid out on a wooden table, steppers in a wood panel.
 export function DeckBuilder({ onConfirm, onBack, showDifficulty = true, step = 2, steps = 2 }) {
   const { t } = useT();
-  const [composition, setComposition] = useState({ keo: 3, bua: 2, bao: 2 });
+  const [composition, setComposition] = useState({ keo: 3, bua: 3, bao: 3 });
   const [difficulty, setDifficulty] = useState(DEFAULT_NPC_DIFFICULTY);
 
   const total = CARD_TYPES.reduce((sum, ty) => sum + composition[ty], 0);
@@ -41,7 +41,8 @@ export function DeckBuilder({ onConfirm, onBack, showDifficulty = true, step = 2
   const cards = CARD_TYPES.flatMap((type) => Array.from({ length: composition[type] }, () => type));
 
   const change = (type, delta) => {
-    sfx.click();
+    if (delta > 0) sfx.card(type);
+    else sfx.click();
     setComposition((prev) => {
       const next = prev[type] + delta;
       if (next < 0 || next > DECK_SIZE) return prev;
@@ -74,7 +75,7 @@ export function DeckBuilder({ onConfirm, onBack, showDifficulty = true, step = 2
 
       {/* the wooden table with the deck laid out */}
       <div
-        className="w-full py-5 sm:py-8 flex justify-center gap-1.5 sm:gap-3.5 min-h-[106px] sm:min-h-[196px]"
+        className="w-full py-5 sm:py-8 flex justify-center gap-1 sm:gap-3 min-h-[86px] sm:min-h-[196px]"
         style={{
           background: 'repeating-linear-gradient(90deg, #6b4428 0 116px, #5a3a22 116px 120px)',
           boxShadow: '0 0 0 3px #2a1a10, inset 0 5px 0 #8a5a34, 0 14px 0 3px rgba(0,0,0,.4)',
@@ -86,7 +87,7 @@ export function DeckBuilder({ onConfirm, onBack, showDifficulty = true, step = 2
           <TableCard key={`${type}-${i}`} type={type} index={i} count={cards.length} />
         ))}
         {Array.from({ length: DECK_SIZE - cards.length }, (_, i) => (
-          <div key={`empty-${i}`} className="w-[46px] h-[66px] sm:w-[92px] sm:h-[130px] border-2 border-dashed border-[#2a1a10] opacity-60" />
+          <div key={`empty-${i}`} className="w-[32px] h-[46px] sm:w-[92px] sm:h-[130px] border-2 border-dashed border-[#2a1a10] opacity-60" />
         ))}
       </div>
 

@@ -13,7 +13,7 @@ describe('buildDeck', () => {
   });
 
   it('allows an all-one-type deck', () => {
-    const deck = buildDeck({ keo: 7, bua: 0, bao: 0 });
+    const deck = buildDeck({ keo: DECK_SIZE, bua: 0, bao: 0 });
     expect(deck.every((c) => c.type === 'keo')).toBe(true);
   });
 });

@@ -182,7 +182,11 @@ function GameShell() {
     setMusicTheme(musicTheme);
   }, [musicTheme]);
 
+  // An unfinished online match this browser can still get back into (BR-ONLINE-03).
+  const [rejoinToken, setRejoinToken] = useState(null);
+
   const resetToMenu = () => {
+    setRejoinToken(null);
     setOnlineStage({ id: null, inMatch: false });
     setScreen(SCREENS.MENU);
     setPlayerCharacter(null);
@@ -215,7 +219,14 @@ function GameShell() {
 
 
       {screen === SCREENS.MENU && (
-        <MainMenu onStart={() => setScreen(SCREENS.CHARACTER)} onPlayOnline={() => setScreen(SCREENS.ONLINE)} />
+        <MainMenu
+          onStart={() => setScreen(SCREENS.CHARACTER)}
+          onPlayOnline={() => setScreen(SCREENS.ONLINE)}
+          onRejoin={(token) => {
+            setRejoinToken(token);
+            setScreen(SCREENS.ONLINE);
+          }}
+        />
       )}
 
       {screen === SCREENS.CHARACTER && (
@@ -259,7 +270,7 @@ function GameShell() {
         />
       )}
 
-      {screen === SCREENS.ONLINE && <OnlineFlow onExit={resetToMenu} onStage={handleOnlineStage} />}
+      {screen === SCREENS.ONLINE && <OnlineFlow onExit={resetToMenu} onStage={handleOnlineStage} rejoinToken={rejoinToken} />}
     </div>
     </MatchSceneContext.Provider>
   );

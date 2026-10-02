@@ -3,7 +3,8 @@ import { PHASES } from '../engine/constants.js';
 import { decideSkillUse, decideCard } from './npcAI.js';
 
 // Drives the 'npc' side through the same dispatch actions a human player would issue.
-export function useNpcController(state, dispatch, playerComposition, difficulty = 'normal') {
+// `paused`: the NPC does nothing while the player has the match paused.
+export function useNpcController(state, dispatch, playerComposition, difficulty = 'normal', paused = false) {
   const stateRef = useRef(state);
   const phase = state?.phase;
   const turnNumber = state?.turnNumber;
@@ -13,7 +14,7 @@ export function useNpcController(state, dispatch, playerComposition, difficulty 
   }, [state]);
 
   useEffect(() => {
-    if (!phase || phase === PHASES.FINISHED) return undefined;
+    if (paused || !phase || phase === PHASES.FINISHED) return undefined;
 
     let timeoutId;
 
@@ -38,5 +39,5 @@ export function useNpcController(state, dispatch, playerComposition, difficulty 
     }
 
     return () => clearTimeout(timeoutId);
-  }, [phase, turnNumber, dispatch, playerComposition, difficulty]);
+  }, [phase, turnNumber, dispatch, playerComposition, difficulty, paused]);
 }

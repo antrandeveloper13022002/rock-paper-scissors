@@ -2,12 +2,14 @@
 // the exact same pure game engine the client uses locally against the NPC, so
 // the rules of a match are guaranteed identical — the server is just the
 // authoritative referee that arbitrates two real players.
+import { randomUUID } from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import { createMatch, matchReducer } from '../src/engine/reducer.js';
 import { PHASES, SKILL_PHASE_SECONDS, CHOOSE_PHASE_SECONDS, otherSide } from '../src/engine/constants.js';
 import { validateSetup, pickStage, redactFor } from './protocol.js';
 
 const MAX_PAYLOAD_BYTES = 16 * 1024;
+const SIDES = ['player', 'npc'];
 
 function makeRoomCode(rooms) {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no ambiguous chars
@@ -30,7 +32,9 @@ export function createGameServer({
   maxRooms = 500,
   maxMessagesPerSecond = 20,
   maxConnectionsPerIp = 8,
-  waitingRoomTtlMs = 10 * 60 * 1000,
+  waitingRoomTtlMs = 3 * 60 * 1000,
+  pauseLimitMs = 30 * 1000,
+  finishedResultTtlMs = 10 * 60 * 1000,
   rng = Math.random,
   nextTurnDelayMs = 3000,
 } = {}) {
@@ -38,12 +42,29 @@ export function createGameServer({
   const rooms = new Map();
   // ws -> { roomCode, side }
   const socketInfo = new WeakMap();
+  // rejoin token -> { roomCode, side } (BR-ONLINE-03)
+  const rejoinTokens = new Map();
+  // rejoin token -> final snapshot of a match that ended and was cleaned up,
+  // so a player coming back late still sees how it ended.
+  const finishedSeats = new Map();
   // client ip -> open connections
   const connectionsPerIp = new Map();
+  // Random matchmaking (BR-ONLINE-01): at most one player waits; the next
+  // FIND_MATCH is paired with them. { ws, setup, timer } | null
+  let searching = null;
+
+  function stopSearching(ws) {
+    if (searching?.ws !== ws) return;
+    clearTimeout(searching.timer);
+    searching = null;
+  }
 
   function broadcastState(room) {
-    send(room.sockets.player, { type: 'STATE', state: redactFor(room.state, 'player') });
-    send(room.sockets.npc, { type: 'STATE', state: redactFor(room.state, 'npc') });
+    for (const side of SIDES) send(room.sockets[side], { type: 'STATE', state: redactFor(room.state, side) });
+  }
+
+  function broadcast(room, message) {
+    for (const side of SIDES) send(room.sockets[side], message);
   }
 
   function clearRoomTimer(room) {
@@ -53,18 +74,41 @@ export function createGameServer({
     }
   }
 
+  function deleteRoom(room) {
+    clearRoomTimer(room);
+    if (room.paused) clearTimeout(room.paused.timer);
+    for (const side of SIDES) {
+      const token = room.tokens?.[side];
+      if (!token) continue;
+      rejoinTokens.delete(token);
+      if (room.state?.phase === PHASES.FINISHED) {
+        finishedSeats.set(token, matchSnapshot(room, side));
+        setTimeout(() => finishedSeats.delete(token), finishedResultTtlMs).unref?.();
+      }
+    }
+    rooms.delete(room.code);
+  }
+
+  // Runs `action` after `ms`, remembering when, so a pause can freeze the
+  // remaining time and resume it later.
+  function setPhaseTimer(room, action, ms) {
+    clearRoomTimer(room);
+    room.phaseTimer = { action, deadline: Date.now() + ms };
+    room.timer = setTimeout(() => {
+      room.phaseTimer = null;
+      applyAction(room, action);
+    }, ms);
+  }
+
   // The server owns the countdown for skill/choose phases and the pause before
   // the next round, instead of trusting either client to time out fairly.
   function scheduleNext(room) {
     clearRoomTimer(room);
-    if (!room.state) return;
-    if (room.state.phase === PHASES.SKILL) {
-      room.timer = setTimeout(() => applyAction(room, { type: 'TIMEOUT_SKILL' }), SKILL_PHASE_SECONDS * 1000);
-    } else if (room.state.phase === PHASES.CHOOSE) {
-      room.timer = setTimeout(() => applyAction(room, { type: 'TIMEOUT_CHOOSE' }), CHOOSE_PHASE_SECONDS * 1000);
-    } else if (room.state.phase === PHASES.RESOLVED) {
-      room.timer = setTimeout(() => applyAction(room, { type: 'NEXT_TURN' }), nextTurnDelayMs);
-    }
+    room.phaseTimer = null;
+    if (!room.state || room.paused) return;
+    if (room.state.phase === PHASES.SKILL) setPhaseTimer(room, { type: 'TIMEOUT_SKILL' }, SKILL_PHASE_SECONDS * 1000);
+    else if (room.state.phase === PHASES.CHOOSE) setPhaseTimer(room, { type: 'TIMEOUT_CHOOSE' }, CHOOSE_PHASE_SECONDS * 1000);
+    else if (room.state.phase === PHASES.RESOLVED) setPhaseTimer(room, { type: 'NEXT_TURN' }, nextTurnDelayMs);
   }
 
   function applyAction(room, action) {
@@ -76,6 +120,37 @@ export function createGameServer({
     scheduleNext(room);
   }
 
+  // ── Pause / disconnect (BR-ONLINE-02/03) ──
+  // A pause freezes the whole match for both players for at most
+  // pauseLimitMs; if the side that paused (or dropped) is not back by then,
+  // it forfeits. A disconnect is a forced pause that replaces a manual one.
+  function pauseRoom(room, side, reason) {
+    if (room.paused) {
+      if (reason !== 'disconnect') return;
+      clearTimeout(room.paused.timer);
+    } else if (room.phaseTimer) {
+      room.resumeIn = Math.max(0, room.phaseTimer.deadline - Date.now());
+      room.resumeAction = room.phaseTimer.action;
+      clearRoomTimer(room);
+      room.phaseTimer = null;
+    }
+    const timer = setTimeout(() => {
+      room.paused = null;
+      applyAction(room, { type: 'FORFEIT', side, cause: reason === 'pause' ? 'pauseTimeout' : 'disconnect' });
+    }, pauseLimitMs);
+    room.paused = { by: side, reason, until: Date.now() + pauseLimitMs, timer };
+    broadcast(room, { type: 'PAUSED', by: side, reason, seconds: Math.round(pauseLimitMs / 1000) });
+  }
+
+  function resumeRoom(room) {
+    if (!room.paused) return;
+    clearTimeout(room.paused.timer);
+    room.paused = null;
+    if (room.resumeAction) setPhaseTimer(room, room.resumeAction, room.resumeIn);
+    room.resumeAction = null;
+    broadcast(room, { type: 'RESUMED' });
+  }
+
   function startMatch(room) {
     const { player, npc } = room.pending;
     room.state = createMatch({
@@ -84,12 +159,27 @@ export function createGameServer({
       npcCharacter: npc.character,
       npcComposition: npc.composition,
     });
-    const stageVotes = { player: player.stageVote, npc: npc.stageVote };
-    const stage = pickStage(player.stageVote, npc.stageVote, rng);
-    const common = { stage, stageVotes, playerComposition: player.composition, npcComposition: npc.composition };
-    send(room.sockets.player, { type: 'MATCH_START', mySide: 'player', state: redactFor(room.state, 'player'), ...common });
-    send(room.sockets.npc, { type: 'MATCH_START', mySide: 'npc', state: redactFor(room.state, 'npc'), ...common });
+    room.stageVotes = { player: player.stageVote, npc: npc.stageVote };
+    room.stage = pickStage(player.stageVote, npc.stageVote, rng);
+    room.tokens = { player: randomUUID(), npc: randomUUID() };
+    for (const side of SIDES) {
+      rejoinTokens.set(room.tokens[side], { roomCode: room.code, side });
+      send(room.sockets[side], { type: 'MATCH_START', ...matchSnapshot(room, side) });
+    }
     scheduleNext(room);
+  }
+
+  // Everything a client needs to (re)build its match screen.
+  function matchSnapshot(room, side) {
+    return {
+      mySide: side,
+      state: redactFor(room.state, side),
+      stage: room.stage,
+      stageVotes: room.stageVotes,
+      playerComposition: room.pending.player.composition,
+      npcComposition: room.pending.npc.composition,
+      rejoinToken: room.tokens[side],
+    };
   }
 
   function handleMessage(ws, raw) {
@@ -101,8 +191,41 @@ export function createGameServer({
     }
     if (!msg || typeof msg !== 'object') return;
 
+    if (msg.type === 'FIND_MATCH') {
+      if (socketInfo.has(ws) || searching?.ws === ws) return; // already in a room / queue
+      const setup = validateSetup(msg);
+      if (!setup) {
+        send(ws, { type: 'ERROR', message: 'INVALID_SETUP' });
+        return;
+      }
+      if (rooms.size >= maxRooms) {
+        send(ws, { type: 'ERROR', message: 'SERVER_FULL' });
+        return;
+      }
+      if (!searching) {
+        const timer = setTimeout(() => {
+          if (searching?.ws !== ws) return;
+          searching = null;
+          send(ws, { type: 'ERROR', message: 'SEARCH_EXPIRED' });
+        }, waitingRoomTtlMs);
+        searching = { ws, setup, timer };
+        send(ws, { type: 'SEARCHING' });
+        return;
+      }
+      // pair with the waiting player: they host (side "player"), we join
+      const host = searching;
+      stopSearching(host.ws);
+      const code = makeRoomCode(rooms);
+      const room = { code, sockets: { player: host.ws, npc: ws }, pending: { player: host.setup, npc: setup }, state: null, timer: null };
+      rooms.set(code, room);
+      socketInfo.set(host.ws, { roomCode: code, side: 'player' });
+      socketInfo.set(ws, { roomCode: code, side: 'npc' });
+      startMatch(room);
+      return;
+    }
+
     if (msg.type === 'CREATE_ROOM' || msg.type === 'JOIN_ROOM') {
-      if (socketInfo.has(ws)) return; // one room per connection
+      if (socketInfo.has(ws) || searching?.ws === ws) return; // one room per connection
       const setup = validateSetup(msg);
       if (!setup) {
         send(ws, { type: 'ERROR', message: 'INVALID_SETUP' });
@@ -135,7 +258,7 @@ export function createGameServer({
         send(ws, { type: 'ERROR', message: 'ROOM_NOT_FOUND' });
         return;
       }
-      if (room.sockets.npc) {
+      if (room.sockets.npc || room.state) {
         send(ws, { type: 'ERROR', message: 'ROOM_FULL' });
         return;
       }
@@ -147,32 +270,91 @@ export function createGameServer({
       return;
     }
 
+    // Back into a match after a dropped connection or a closed tab.
+    if (msg.type === 'REJOIN') {
+      if (socketInfo.has(ws) || searching?.ws === ws) return;
+      const token = String(msg.token ?? '');
+      if (finishedSeats.has(token)) {
+        // the match ended (and was cleaned up) while this player was away
+        send(ws, { type: 'REJOINED', ...finishedSeats.get(token) });
+        return;
+      }
+      const entry = rejoinTokens.get(token);
+      const room = entry && rooms.get(entry.roomCode);
+      if (!room || room.sockets[entry.side]) {
+        send(ws, { type: 'ERROR', message: 'REJOIN_FAILED' });
+        return;
+      }
+      room.sockets[entry.side] = ws;
+      socketInfo.set(ws, { roomCode: room.code, side: entry.side });
+      send(ws, { type: 'REJOINED', ...matchSnapshot(room, entry.side) });
+      if (room.paused?.by === entry.side) resumeRoom(room);
+      return;
+    }
+
+    const info = socketInfo.get(ws);
+    const room = info && rooms.get(info.roomCode);
+    if (!room || !room.state || room.state.phase === PHASES.FINISHED) return;
+
+    if (msg.type === 'PAUSE') {
+      pauseRoom(room, info.side, 'pause');
+      return;
+    }
+    if (msg.type === 'RESUME') {
+      if (room.paused?.by === info.side && room.paused.reason === 'pause') resumeRoom(room);
+      return;
+    }
+
     if (msg.type === 'ACTION') {
-      const info = socketInfo.get(ws);
-      if (!info || !msg.action || typeof msg.action !== 'object') return;
-      const room = rooms.get(info.roomCode);
-      if (!room || !room.state) return;
+      if (!msg.action || typeof msg.action !== 'object') return;
       // Clients may only send player intents; timeouts/NEXT_TURN are the
       // server's alone. The side is always taken from the socket, never
       // trusted from the payload — otherwise a player could act for the
-      // opponent.
+      // opponent. FORFEIT = leaving the match (the other side wins).
+      if (msg.action.type === 'FORFEIT') {
+        if (room.paused) clearTimeout(room.paused.timer);
+        room.paused = null;
+        room.resumeAction = null;
+        applyAction(room, { type: 'FORFEIT', side: info.side, cause: 'left' });
+        return;
+      }
+      if (room.paused) return; // the match is frozen
       if (!['DECLARE_SKILL', 'SELECT_CARD', 'READY'].includes(msg.action.type)) return;
       applyAction(room, { ...msg.action, side: info.side });
     }
   }
 
   function handleClose(ws) {
+    stopSearching(ws); // closing the connection is how a player cancels a search
     const info = socketInfo.get(ws);
     if (!info) return;
     socketInfo.delete(ws);
     const room = rooms.get(info.roomCode);
     if (!room) return;
+    if (room.sockets[info.side] === ws) room.sockets[info.side] = null;
 
-    // After the match is over, leaving is not a disconnect: the other player
-    // keeps their result screen.
-    if (room.state?.phase !== PHASES.FINISHED) send(room.sockets[otherSide(info.side)], { type: 'OPPONENT_LEFT' });
-    clearRoomTimer(room);
-    rooms.delete(room.code);
+    // Waiting room (no match yet): nothing to keep.
+    if (!room.state) {
+      deleteRoom(room);
+      return;
+    }
+    // Both gone, or the match is over: the room is done once nobody is in it.
+    const other = room.sockets[otherSide(info.side)];
+    if (!other || room.state.phase === PHASES.FINISHED) {
+      if (!other) {
+        // both dropped mid-match: whoever dropped first (still on the clock) loses
+        if (room.state.phase !== PHASES.FINISHED && room.paused?.reason === 'disconnect') {
+          const first = room.paused.by;
+          clearTimeout(room.paused.timer);
+          room.paused = null;
+          room.state = matchReducer(room.state, { type: 'FORFEIT', side: first, cause: 'disconnect' });
+        }
+        deleteRoom(room);
+      }
+      return;
+    }
+    // Mid-match drop: give them pauseLimitMs to come back (REJOIN), else forfeit.
+    pauseRoom(room, info.side, 'disconnect');
   }
 
   const wss = new WebSocketServer({

@@ -11,7 +11,12 @@ export function ResultOverlay({ result, outcome, player, npc, onExit }) {
 
   const titleColor = isDraw ? 'text-accent-blue' : isPlayerWin ? 'text-accent-green' : 'text-danger';
   const titleText = isDraw ? t.resultDraw : isPlayerWin ? t.resultWin : t.resultLose;
-  const reason = result.reason === 'score5' ? t.reasonScore5 : t.reasonRoundsExhausted;
+  const reason =
+    result.reason === 'score5'
+      ? t.reasonScore5
+      : result.reason === 'forfeit'
+      ? t.reasonForfeit[isPlayerWin ? 'win' : 'lose'][result.cause ?? 'left']
+      : t.reasonRoundsExhausted;
 
   return (
     <div className="fixed inset-0 bg-[rgba(3,4,8,0.75)] flex items-center justify-center z-20">

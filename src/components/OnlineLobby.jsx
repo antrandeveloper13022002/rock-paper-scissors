@@ -4,7 +4,7 @@ import { sfx } from '../audio/sfx.js';
 import { STAGES } from '../data/stages.js';
 import { Button } from './Button.jsx';
 
-export function OnlineLobby({ status, roomCode, errorMessage, stageVote, onStageVote, onCreateRoom, onJoinRoom, onBack }) {
+export function OnlineLobby({ status, roomCode, errorMessage, stageVote, onStageVote, onFindMatch, onCancelSearch, onCreateRoom, onJoinRoom, onBack }) {
   const { t, lang } = useT();
   const [codeInput, setCodeInput] = useState('');
 
@@ -40,6 +40,25 @@ export function OnlineLobby({ status, roomCode, errorMessage, stageVote, onStage
 
           <Button
             variant="primary"
+            size="lg"
+            className="w-full mb-2"
+            onClick={() => {
+              sfx.click();
+              onFindMatch();
+            }}
+          >
+            {t.findMatch}
+          </Button>
+          <p className="mt-0 mb-4 text-text-dim text-[13px]">{t.findMatchHint}</p>
+
+          <div className="flex items-center gap-3 mb-4 text-text-dim text-sm">
+            <span className="flex-1 h-0.5 bg-[#3d2616]" />
+            {t.orPlayWithFriend}
+            <span className="flex-1 h-0.5 bg-[#3d2616]" />
+          </div>
+
+          <Button
+            variant="ghost"
             className="w-full mb-4"
             onClick={() => {
               sfx.click();
@@ -76,6 +95,21 @@ export function OnlineLobby({ status, roomCode, errorMessage, stageVote, onStage
       )}
 
       {status === 'connecting' && <p className="text-text-dim">{t.connecting}</p>}
+
+      {status === 'searching' && (
+        <div className="flex flex-col items-center gap-4" aria-live="polite">
+          <p className="m-0 text-xl animate-pulse">{t.searchingOpponent}</p>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              sfx.click();
+              onCancelSearch();
+            }}
+          >
+            {t.cancelSearch}
+          </Button>
+        </div>
+      )}
 
       {status === 'waiting' && (
         <>

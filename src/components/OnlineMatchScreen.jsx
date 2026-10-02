@@ -1,86 +1,70 @@
-import { useEffect, useRef, useState } from 'react';
+import { useT } from '../i18n/strings.js';
 import { useTurnTimer } from './useTurnTimer.js';
 import { MatchScreenView } from './MatchScreenView.jsx';
-import { useT } from '../i18n/strings.js';
+import { PauseModal, PausedBanner } from './PauseOverlays.jsx';
+import { Button } from './Button.jsx';
 import { PHASES } from '../engine/constants.js';
 
 // Online PvP: the server (server/gameServer.js) runs the exact same reducer
-// authoritatively and pushes full state snapshots down; this component never
-// runs the reducer itself, it only ever reflects what the server says and
-// forwards the local player's intent as ACTION messages.
+// authoritatively and pushes state snapshots down. OnlineFlow owns the
+// connection and the state (so a reconnect can swap sockets without losing
+// messages); this component only renders it and sends the player's intents.
 export function OnlineMatchScreen({
-  ws,
+  state,
   mySide,
-  initialState,
   myCharacter,
   oppCharacter,
   oppComposition,
-  stageNotice,
-  stageId,
   myComposition,
+  stageId,
+  notice,
+  pauseInfo,
+  reconnecting,
+  matchError,
+  send,
   onExit,
-  onOpponentLeft,
+  onLeave,
 }) {
   const { t } = useT();
-  const [state, setState] = useState(initialState);
-  const [opponentLeft, setOpponentLeft] = useState(false);
-  const finishedRef = useRef(false);
-  useEffect(() => {
-    finishedRef.current = state.phase === PHASES.FINISHED;
-  }, [state.phase]);
+  const finished = state.phase === PHASES.FINISHED;
+  const frozen = !finished && (Boolean(pauseInfo) || reconnecting);
 
-  useEffect(() => {
-    const onMessage = (event) => {
-      const msg = JSON.parse(event.data);
-      if (msg.type === 'STATE') setState(msg.state);
-      // after the match ends, the opponent leaving the result screen is not a disconnect
-      else if (msg.type === 'OPPONENT_LEFT') setOpponentLeft((left) => left || !finishedRef.current);
-    };
-    ws.addEventListener('message', onMessage);
-    return () => ws.removeEventListener('message', onMessage);
-  }, [ws]);
+  // Display-only countdown — the server's own timers advance the match. It
+  // freezes while the match is paused or this client is reconnecting.
+  const secondsLeft = useTurnTimer(state.phase, state.turnNumber, undefined, frozen);
 
-  const dispatch = (action) => {
-    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ACTION', action }));
-  };
-
-  // Display-only countdown — no dispatch here, since only the server's own
-  // timers are allowed to actually time a phase out.
-  const secondsLeft = useTurnTimer(state.phase, state.turnNumber);
-
-  if (opponentLeft) {
+  if (matchError) {
     return (
-      <div className="w-full max-w-[560px] bg-gradient-to-b from-panel-top to-panel-bot border-2 border-border-dim p-6 text-center">
-        <p className="text-danger mb-4">{t.opponentDisconnected}</p>
-        <button
-          className="font-mono font-bold border-2 border-accent-blue text-accent-blue px-4 py-2.5 uppercase tracking-wider text-xs"
-          onClick={() => {
-            ws.close();
-            onOpponentLeft();
-          }}
-        >
+      <div className="w-full max-w-[460px] bg-gradient-to-b from-panel-top to-panel-bot pixel-panel p-6 flex flex-col gap-4 text-center">
+        <p className="m-0 text-xl text-danger">{matchError}</p>
+        <Button variant="primary" size="lg" onClick={onExit}>
           {t.backToMenu}
-        </button>
+        </Button>
       </div>
     );
   }
 
   return (
-    <MatchScreenView
-      state={state}
-      dispatch={dispatch}
-      mySide={mySide}
-      myCharacter={myCharacter}
-      oppCharacter={oppCharacter}
-      oppComposition={oppComposition}
-      myComposition={myComposition}
-      stageId={stageId}
-      notice={stageNotice}
-      secondsLeft={secondsLeft}
-      onExit={() => {
-        ws.close();
-        onExit();
-      }}
-    />
+    <>
+      <MatchScreenView
+        state={state}
+        dispatch={(action) => send({ type: 'ACTION', action })}
+        mySide={mySide}
+        myCharacter={myCharacter}
+        oppCharacter={oppCharacter}
+        oppComposition={oppComposition}
+        myComposition={myComposition}
+        stageId={stageId}
+        notice={notice}
+        secondsLeft={secondsLeft}
+        onPause={frozen ? undefined : () => send({ type: 'PAUSE' })}
+        onExit={onExit}
+      />
+      {!finished && reconnecting && <PausedBanner kind="reconnecting" />}
+      {!finished && !reconnecting && pauseInfo?.by === 'me' && pauseInfo.reason === 'pause' && (
+        <PauseModal online until={pauseInfo.until} onResume={() => send({ type: 'RESUME' })} onLeave={onLeave} />
+      )}
+      {!finished && !reconnecting && pauseInfo?.by === 'opp' && <PausedBanner kind={pauseInfo.reason} until={pauseInfo.until} />}
+    </>
   );
 }

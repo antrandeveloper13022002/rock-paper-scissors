@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createMatch, matchReducer } from './reducer.js';
-import { PHASES, SKILL_IDS, WIN_SCORE, TOTAL_TURNS } from './constants.js';
+import { PHASES, SKILL_IDS, WIN_SCORE, TOTAL_TURNS, DECK_SIZE } from './constants.js';
 
 function char(id, skillId) {
   return { id, name: { vi: id, en: id }, color: '#fff', skillId };
@@ -9,9 +9,9 @@ function char(id, skillId) {
 function start({ playerSkill = null, npcSkill = null, playerComposition, npcComposition } = {}) {
   return createMatch({
     playerCharacter: char('player-char', playerSkill),
-    playerComposition: playerComposition ?? { keo: 3, bua: 2, bao: 2 },
+    playerComposition: playerComposition ?? { keo: 3, bua: 3, bao: 3 },
     npcCharacter: char('npc-char', npcSkill),
-    npcComposition: npcComposition ?? { keo: 2, bua: 3, bao: 2 },
+    npcComposition: npcComposition ?? { keo: 2, bua: 4, bao: 3 },
   });
 }
 
@@ -36,9 +36,9 @@ function advance(state) {
   return matchReducer(state, { type: 'NEXT_TURN' });
 }
 
-const ALL_KEO = { keo: 7, bua: 0, bao: 0 };
-const ALL_BUA = { keo: 0, bua: 7, bao: 0 };
-const ALL_BAO = { keo: 0, bua: 0, bao: 7 };
+const ALL_KEO = { keo: DECK_SIZE, bua: 0, bao: 0 };
+const ALL_BUA = { keo: 0, bua: DECK_SIZE, bao: 0 };
+const ALL_BAO = { keo: 0, bua: 0, bao: DECK_SIZE };
 
 describe('basic round resolution', () => {
   it('awards 1 point to the winner and 0 to a draw', () => {
@@ -186,8 +186,8 @@ describe('POINT_STEAL skill', () => {
   it('also subtracts 1 point from the loser on top of the normal award', () => {
     let state = start({
       playerSkill: SKILL_IDS.POINT_STEAL,
-      playerComposition: { keo: 7, bua: 0, bao: 0 },
-      npcComposition: { keo: 0, bua: 0, bao: 7 },
+      playerComposition: { keo: DECK_SIZE, bua: 0, bao: 0 },
+      npcComposition: { keo: 0, bua: 0, bao: DECK_SIZE },
     });
     // Give npc 2 points first so the steal has something to subtract from.
     state = { ...state, players: { ...state.players, npc: { ...state.players.npc, score: 2 } } };
@@ -199,8 +199,8 @@ describe('POINT_STEAL skill', () => {
   it('never takes the loser below 0 points', () => {
     let state = start({
       playerSkill: SKILL_IDS.POINT_STEAL,
-      playerComposition: { keo: 7, bua: 0, bao: 0 },
-      npcComposition: { keo: 0, bua: 0, bao: 7 },
+      playerComposition: { keo: DECK_SIZE, bua: 0, bao: 0 },
+      npcComposition: { keo: 0, bua: 0, bao: DECK_SIZE },
     });
     state = playTurn(state, { playerUse: true, playerType: 'keo', npcType: 'bao' });
     expect(state.players.npc.score).toBe(0);
@@ -209,8 +209,8 @@ describe('POINT_STEAL skill', () => {
   it('does nothing when the user does not win', () => {
     let state = start({
       playerSkill: SKILL_IDS.POINT_STEAL,
-      playerComposition: { keo: 0, bua: 0, bao: 7 },
-      npcComposition: { keo: 7, bua: 0, bao: 0 },
+      playerComposition: { keo: 0, bua: 0, bao: DECK_SIZE },
+      npcComposition: { keo: DECK_SIZE, bua: 0, bao: 0 },
     });
     state = { ...state, players: { ...state.players, npc: { ...state.players.npc, score: 2 } } };
     state = playTurn(state, { playerUse: true, playerType: 'bao', npcType: 'keo' });
@@ -314,8 +314,8 @@ describe('REDRAW_ALL skill', () => {
 describe('winning at WIN_SCORE ends the match immediately', () => {
   it('sets result as soon as a side reaches WIN_SCORE, and NEXT_TURN moves to FINISHED', () => {
     let state = start({
-      playerComposition: { keo: 7, bua: 0, bao: 0 },
-      npcComposition: { keo: 0, bua: 7, bao: 0 }, // npc always wins (bua beats keo)
+      playerComposition: { keo: DECK_SIZE, bua: 0, bao: 0 },
+      npcComposition: { keo: 0, bua: DECK_SIZE, bao: 0 }, // npc always wins (bua beats keo)
     });
 
     for (let turn = 1; turn <= WIN_SCORE; turn += 1) {
@@ -334,17 +334,17 @@ describe('winning at WIN_SCORE ends the match immediately', () => {
   });
 });
 
-describe('roundsExhausted tie-break after 7 turns with nobody reaching WIN_SCORE', () => {
+describe('roundsExhausted tie-break after all turns with nobody reaching WIN_SCORE', () => {
   it('the higher score wins', () => {
-    // Player wins turns 1-2 (keo beats npc's bao), then both sides draw keo-vs-keo
-    // for the remaining 5 turns — each composition carries exactly enough of each
-    // type to make that sequence possible.
+    // The npc plays its 2 bao as soon as each is in hand (keo otherwise); by
+    // turn 7 it has seen all 9 cards, so both bao are always played: player
+    // wins exactly 2 rounds (keo beats bao), draws the rest, never reaches 5.
     let state = start({
-      playerComposition: { keo: 7, bua: 0, bao: 0 },
-      npcComposition: { keo: 5, bua: 0, bao: 2 },
+      playerComposition: { keo: DECK_SIZE, bua: 0, bao: 0 },
+      npcComposition: { keo: DECK_SIZE - 2, bua: 0, bao: 2 },
     });
     for (let turn = 1; turn <= TOTAL_TURNS; turn += 1) {
-      state = playTurn(state, { playerType: 'keo', npcType: turn <= 2 ? 'bao' : 'keo' });
+      state = playTurn(state, { playerType: 'keo', npcType: 'bao' });
       if (turn < TOTAL_TURNS) state = advance(state);
     }
     state = advance(state);
@@ -354,8 +354,8 @@ describe('roundsExhausted tie-break after 7 turns with nobody reaching WIN_SCORE
 
   it('is a draw when scores are tied', () => {
     let state = start({
-      playerComposition: { keo: 7, bua: 0, bao: 0 },
-      npcComposition: { keo: 7, bua: 0, bao: 0 },
+      playerComposition: { keo: DECK_SIZE, bua: 0, bao: 0 },
+      npcComposition: { keo: DECK_SIZE, bua: 0, bao: 0 },
     });
     for (let turn = 1; turn <= TOTAL_TURNS; turn += 1) {
       state = playTurn(state, { playerType: 'keo', npcType: 'keo' });
@@ -422,5 +422,21 @@ describe('full match simulation never crashes', () => {
       expect(state.phase).toBe(PHASES.FINISHED);
       expect(['player', 'npc', 'draw']).toContain(state.result.winner);
     }
+  });
+});
+
+describe('FORFEIT', () => {
+  it('ends the match at once with the other side as winner', () => {
+    const state = matchReducer(start(), { type: 'FORFEIT', side: 'npc' });
+    expect(state.phase).toBe(PHASES.FINISHED);
+    expect(state.result).toEqual({ winner: 'player', reason: 'forfeit' });
+  });
+  it('records why the side forfeited', () => {
+    const state = matchReducer(start(), { type: 'FORFEIT', side: 'player', cause: 'disconnect' });
+    expect(state.result).toEqual({ winner: 'npc', reason: 'forfeit', cause: 'disconnect' });
+  });
+  it('does nothing once the match is already finished', () => {
+    const finished = matchReducer(start(), { type: 'FORFEIT', side: 'npc' });
+    expect(matchReducer(finished, { type: 'FORFEIT', side: 'player' })).toBe(finished);
   });
 });
