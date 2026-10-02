@@ -149,12 +149,16 @@ function GameShell() {
     return () => window.removeEventListener('pointerdown', unlock);
   }, []);
 
+  // Picking a character (vs NPC, or the online flow's first step): the 3D
+  // scene shows that character large and previews its stage.
+  const browsing = (screen === SCREENS.CHARACTER || (screen === SCREENS.ONLINE && !onlineStage.inMatch)) && browsedCharacterId;
+
   // vs NPC the match is played on the NPC's stage (BR-3D-04); while picking a
   // character the backdrop previews that character's stage.
   const stageId =
     screen === SCREENS.MATCH && matchSetup
       ? matchSetup.npcCharacter.id
-      : screen === SCREENS.CHARACTER && browsedCharacterId
+      : browsing
       ? browsedCharacterId
       : screen === SCREENS.ONLINE && onlineStage.id
       ? onlineStage.id
@@ -166,11 +170,11 @@ function GameShell() {
   const musicTheme = inMatch ? stageId : DEFAULT_STAGE;
 
   // Camera shot and the voxel characters standing beside the panels.
-  const shot = inMatch ? 'match' : screen === SCREENS.CHARACTER ? 'character' : screen === SCREENS.MENU ? 'menu' : 'deck';
+  const shot = inMatch ? 'match' : browsing ? 'character' : screen === SCREENS.MENU ? 'menu' : 'deck';
   const sceneCharacters =
     screen === SCREENS.MENU
       ? [{ id: 'chien-binh', x: -4.4 }, { id: 'phap-su', x: 4.4, flip: true }]
-      : screen === SCREENS.CHARACTER && browsedCharacterId
+      : browsing
       ? [{ id: browsedCharacterId, x: 3.9, flip: true, scale: 1.6 }]
       : inMatch && matchScene
       ? [
@@ -187,6 +191,7 @@ function GameShell() {
 
   const resetToMenu = () => {
     setRejoinToken(null);
+    setBrowsedCharacterId(null);
     setOnlineStage({ id: null, inMatch: false });
     setScreen(SCREENS.MENU);
     setPlayerCharacter(null);
@@ -270,7 +275,7 @@ function GameShell() {
         />
       )}
 
-      {screen === SCREENS.ONLINE && <OnlineFlow onExit={resetToMenu} onStage={handleOnlineStage} rejoinToken={rejoinToken} />}
+      {screen === SCREENS.ONLINE && <OnlineFlow onExit={resetToMenu} onStage={handleOnlineStage} onBrowse={setBrowsedCharacterId} rejoinToken={rejoinToken} />}
     </div>
     </MatchSceneContext.Provider>
   );

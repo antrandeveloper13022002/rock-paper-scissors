@@ -21,7 +21,9 @@ const RECONNECT_EVERY_MS = 2000;
 // be replaced (REJOIN) without the match screen missing any message.
 // onStage(stageId, inMatch) lets the app show the voted/picked stage and play its music.
 // `rejoinToken`: open straight into an unfinished match (menu "rejoin" button).
-export function OnlineFlow({ onExit, onStage, rejoinToken = null }) {
+// onBrowse(characterId | null): the character being looked at on the first step,
+// so the 3D scene can show it (null once past that step).
+export function OnlineFlow({ onExit, onStage, onBrowse, rejoinToken = null }) {
   const { t, lang } = useT();
   const [step, setStep] = useState(rejoinToken ? STEPS.REJOIN : STEPS.CHARACTER);
   const [playerCharacter, setPlayerCharacter] = useState(null);
@@ -55,6 +57,11 @@ export function OnlineFlow({ onExit, onStage, rejoinToken = null }) {
   useEffect(() => {
     if (step === STEPS.LOBBY && stageVote) onStage?.(stageVote, false);
   }, [step, stageVote, onStage]);
+
+  // Past the character step the scene stops showcasing a character.
+  useEffect(() => {
+    if (step !== STEPS.CHARACTER) onBrowse?.(null);
+  }, [step, onBrowse]);
 
   // Keep the rejoin token (and a summary of the match, for the menu) fresh
   // while the match is open, so a closed tab can come back within the server's
@@ -246,6 +253,7 @@ export function OnlineFlow({ onExit, onStage, rejoinToken = null }) {
     return (
       <CharacterSelect
         steps={3}
+        onBrowse={onBrowse}
         onBack={onExit}
         onConfirm={(character) => {
           setPlayerCharacter(character);
