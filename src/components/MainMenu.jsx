@@ -12,9 +12,9 @@ export function MainMenu({ onStart, onPlayOnline, onRejoin }) {
   const [showTutorial, setShowTutorial] = useState(false);
 
   return (
-    <div className="w-full flex flex-col items-center gap-8 sm:gap-12 pt-4 sm:pt-10">
+    <div className="w-full flex flex-col items-center gap-8 sm:gap-12 pt-1 sm:pt-2">
       <div className="flex flex-col items-center gap-1 text-center">
-        <h1 className="m-0 text-6xl sm:text-9xl leading-[0.9] font-normal tracking-[4px] text-accent-blue [text-shadow:6px_6px_0_#2a1a10,10px_10px_0_rgba(0,0,0,.35)]">
+        <h1 className="m-0 pt-[0.45em] text-6xl sm:text-9xl leading-[0.9] font-normal tracking-[4px] text-accent-blue [text-shadow:6px_6px_0_#2a1a10,10px_10px_0_rgba(0,0,0,.35)]">
           {t.titleMain}
         </h1>
         <p className="m-0 text-2xl sm:text-4xl tracking-[10px] [text-shadow:4px_4px_0_#2a1a10]">{t.titleSub}</p>
